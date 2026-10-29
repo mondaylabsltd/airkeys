@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.TextRange
@@ -58,7 +60,7 @@ import app.airkeys.core.JsonKind
 import app.airkeys.core.JsonPiece
 import app.airkeys.core.Action
 import app.airkeys.core.CodeFrame
-import app.airkeys.core.accountCount
+import app.airkeys.core.WheelPage
 import app.airkeys.core.PhraseInput
 import app.airkeys.core.RadioKind
 import app.airkeys.core.RadioState
@@ -134,7 +136,7 @@ private fun Screens(view: ViewModel, act: (Action) -> ViewModel, codeFrame: (Int
                 }, actions = { PrimaryButton(tr("Done", "完成"), { act(Action.Done) }) }) {
                     if (reading) {
                         Text(tr("What the code says", "动态码的内容"), style = Type.heading)
-                        // a line at a time, drawn as it scrolls into view: all 100 accounts are
+                        // a line at a time, drawn as it scrolls into view: a page of 100 accounts is
                         // about a thousand lines, too many to lay out at once
                         val shape = RoundedCornerShape(16.dp)
                         LazyColumn(
@@ -441,8 +443,34 @@ private fun Home(s: Screen.Home, act: (Action) -> ViewModel) {
             }
         },
     ) {
-        NumberWheel(s.index.toInt(), accountCount().toInt(), { act(Action.Account(it.toUInt())) }, unit = tr("Account", "账户"))
+        // a hundred numbers at a time: the wheel's page, turned below it
+        val first = s.page.first.toInt()
+        key(first) {
+            NumberWheel(
+                s.index.toInt() - first,
+                (s.page.last - s.page.first).toInt() + 1,
+                { act(Action.Account((first + it).toUInt())) },
+                unit = tr("Account", "账户"),
+                first = first,
+            )
+        }
+        PageTurner(s.page, act)
         for (a in s.accounts) AccountCard(a) { act(Action.OpenAccount(a.network)) }
+    }
+}
+
+/** "‹ #100 – #199 ›": the wheel's page, and the pages either side of it. */
+@Composable
+private fun PageTurner(page: WheelPage, act: (Action) -> ViewModel) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        val dim = { on: Boolean -> if (on) Ink.text else Ink.faint }
+        Box(Modifier.size(44.dp).clip(CircleShape).clickable(enabled = page.previous) { act(Action.Page(false)) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.back, tr("Previous 100 accounts", "上一组 100 个账户"), tint = dim(page.previous), modifier = Modifier.size(20.dp))
+        }
+        Text(page.label, style = Type.small.copy(color = Ink.dim, fontFeatureSettings = "tnum"), modifier = Modifier.widthIn(min = 120.dp), textAlign = TextAlign.Center)
+        Box(Modifier.size(44.dp).clip(CircleShape).clickable(enabled = page.next) { act(Action.Page(true)) }, contentAlignment = Alignment.Center) {
+            Icon(Icons.forward, tr("Next 100 accounts", "下一组 100 个账户"), tint = dim(page.next), modifier = Modifier.size(20.dp))
+        }
     }
 }
 

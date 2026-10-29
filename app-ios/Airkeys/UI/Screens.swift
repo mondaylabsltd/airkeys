@@ -38,8 +38,8 @@ struct RootView: View {
             } actions: {
                 AkButton(title: tr("Open wallet", "打开钱包"), enabled: problem == nil) { act(.open) }
             }
-        case let .home(index, accounts):
-            Home(index: index, accounts: accounts, act: act)
+        case let .home(index, accounts, page):
+            Home(index: index, accounts: accounts, page: page, act: act)
         case let .account(account):
             AccountScreen(a: account, act: act)
         case let .connect(_, choices, scopes):
@@ -288,6 +288,7 @@ private struct ImportScreen: View {
 private struct Home: View {
     let index: UInt32
     let accounts: [AccountRow]
+    let page: WheelPage
     let act: (Action) -> Void
 
     var body: some View {
@@ -296,7 +297,8 @@ private struct Home: View {
                 Label(tr("Close wallet", "关闭钱包"), systemImage: "lock").font(.akSmall).foregroundStyle(Ink.dim).padding(.horizontal, 12).padding(.vertical, 8)
             }
         }, content: {
-            AccountWheel(index: index) { act(.account(index: $0)) }
+            AccountWheel(index: index, page: page) { act(.account(index: $0)) }
+            PageTurner(page: page, act: act)
             ForEach(accounts, id: \.network) { a in
                 Button { act(.openAccount(network: a.network)) } label: {
                     Card {
@@ -325,6 +327,8 @@ private struct Home: View {
 /// Like the Timer's "15 min", the unit and the number meet at the center: "Account 15".
 private struct AccountWheel: View {
     let index: UInt32
+    /// The hundred numbers the wheel holds: a few thousand would make it slow, for VoiceOver too
+    let page: WheelPage
     let choose: (UInt32) -> Void
 
     var body: some View {
@@ -332,7 +336,7 @@ private struct AccountWheel: View {
             let half = g.size.width / 2
             ZStack(alignment: .leading) {
                 Picker(tr("Account", "账户"), selection: Binding(get: { index }, set: choose)) {
-                    ForEach(0..<accountCount(), id: \.self) { i in
+                    ForEach(page.first...page.last, id: \.self) { i in
                         Text("\(i)").font(.system(size: 24).monospacedDigit()).foregroundStyle(Ink.text)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, half + 5).tag(i)
                     }
@@ -345,6 +349,31 @@ private struct AccountWheel: View {
             }
         }
         .frame(height: 216) // the system wheel's own height: less crops its drum
+        .id(page.first) // a new page is a new wheel
+    }
+}
+
+/// "‹ #100 – #199 ›": the wheel's page, and the pages either side of it.
+private struct PageTurner: View {
+    let page: WheelPage
+    let act: (Action) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            turn(next: false, symbol: "chevron.left", label: tr("Previous 100 accounts", "上一组 100 个账户"), enabled: page.previous)
+            Text(page.label).font(.akSmall.monospacedDigit()).foregroundStyle(Ink.dim).frame(minWidth: 120)
+            turn(next: true, symbol: "chevron.right", label: tr("Next 100 accounts", "下一组 100 个账户"), enabled: page.next)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func turn(next: Bool, symbol: String, label: String, enabled: Bool) -> some View {
+        Button { act(.page(next: next)) } label: {
+            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).frame(width: 44, height: 36)
+        }
+        .foregroundStyle(enabled ? Ink.text : Ink.faint)
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 }
 
@@ -402,7 +431,7 @@ private struct CodeScreen: View {
         } content: {
             if reading {
                 Text(tr("What the code says", "动态码的内容")).font(.akHeading).foregroundStyle(Ink.text)
-                // a line at a time, drawn as it scrolls into view: all 100 accounts are about a
+                // a line at a time, drawn as it scrolls into view: a page of 100 accounts is about a
                 // thousand lines, too many to lay out at once
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 3) {

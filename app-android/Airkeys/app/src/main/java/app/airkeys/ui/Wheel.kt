@@ -67,13 +67,13 @@ private val FADE = Brush.verticalGradient(
 )
 
 /**
- * A picker wheel, like the iOS timer's: the numbers 0 until [count] on a drum, a haptic tick for
+ * A picker wheel, like the iOS timer's: [count] numbers from [first] on a drum, a haptic tick for
  * each one that passes the middle, and [onChosen] once the wheel comes to rest on another
  * number. A tap on a number turns the wheel to it. [unit] and the number sit together in the
  * band, centered ("Account 15", as the timer shows "15 min").
  */
 @Composable
-fun NumberWheel(value: Int, count: Int, onChosen: (Int) -> Unit, unit: String, modifier: Modifier = Modifier) {
+fun NumberWheel(value: Int, count: Int, onChosen: (Int) -> Unit, unit: String, modifier: Modifier = Modifier, first: Int = 0) {
     val rowPx = with(LocalDensity.current) { ROW.toPx() }
     val state = rememberLazyListState(initialFirstVisibleItemIndex = value)
     val scope = rememberCoroutineScope()
@@ -103,7 +103,7 @@ fun NumberWheel(value: Int, count: Int, onChosen: (Int) -> Unit, unit: String, m
     }
 
     val number = Type.title.copy(fontSize = 26.sp, fontWeight = FontWeight.Normal, fontFeatureSettings = "tnum")
-    Box(modifier.fillMaxWidth().height(ROW * VISIBLE).semantics { contentDescription = "$unit $value" }, contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().height(ROW * VISIBLE).semantics { contentDescription = "$unit ${first + value}" }, contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth().height(ROW).clip(RoundedCornerShape(10.dp)).background(Ink.raised.copy(alpha = 0.7f)))
         LazyColumn(
             state = state,
@@ -130,7 +130,7 @@ fun NumberWheel(value: Int, count: Int, onChosen: (Int) -> Unit, unit: String, m
                             scaleY = scaleX
                         },
                     end = {},
-                    start = { Text("$i", style = number) },
+                    start = { Text("${first + i}", style = number) },
                 )
             }
         }

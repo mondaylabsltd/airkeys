@@ -104,6 +104,8 @@ pub enum Action {
 
     /// Show another account number, below [`account_count`](crate::runtime::account_count).
     Account { index: u32 },
+    /// Turn the home screen's wheel to the next page of accounts (or the one before): its first.
+    Page { next: bool },
     /// Show the home screen's account on `network`: its address, path and code.
     OpenAccount { network: crate::view::NetworkKind },
     /// Show one account as a code.
@@ -148,6 +150,7 @@ impl std::fmt::Debug for Action {
             Action::Open => "Open",
             Action::Close => "Close",
             Action::Account { .. } => "Account",
+            Action::Page { .. } => "Page",
             Action::OpenAccount { .. } => "OpenAccount",
             Action::ShareAccount { .. } => "ShareAccount",
             Action::Connect => "Connect",

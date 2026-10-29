@@ -121,6 +121,7 @@ fn text_from_a_request_reaches_the_screen_cleaned() {
 
 #[test]
 fn paying_the_payer_back_is_refused_however_it_is_spelled() {
+    // (Bitcoin change back to the payer, written as §3 writes it, is allowed: see below)
     // EVM: any case of the paying address
     for spelling in [EVM0.to_lowercase(), format!("0x{}", EVM0[2..].to_uppercase())] {
         let e = refusal(&evm(json!([eth(json!({"address":spelling}), "1000", 0, "1000000000")])));
@@ -141,6 +142,36 @@ fn paying_the_payer_back_is_refused_however_it_is_spelled() {
         ));
         assert!(e.contains("goes back to the account that pays"), "{spelling}: {e}");
     }
+}
+
+#[test]
+fn bitcoin_change_may_come_back_to_the_payer_once_and_only_as_written() {
+    // a plain cold wallet keeps its coins on one account: the change named by the paying
+    // account's index, or by its address exactly as §3 writes it
+    for back in [json!({"index":0}), json!({"address":BTC0}), json!({"index":0,"address":BTC0})] {
+        let r = review(
+            &btc(
+                100_000,
+                json!([{"to":{"address":FOREIGN_BTC},"amount":"40000"},{"to":back,"amount":"59000"}]),
+            ),
+            &wallet(),
+        )
+        .unwrap_or_else(|e| panic!("{back}: {}", e.en));
+        let change = &r.transfers[1];
+        assert_eq!((change.own, change.to.as_str()), (Some(0), BTC0), "{back}");
+        assert_eq!(change.note.as_ref().unwrap().en, "Change, back to this account");
+        // the fee is weighed against what is paid away, not against the change
+        assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+    }
+    // twice is not change
+    let e = refusal(&btc(
+        100_000,
+        json!([{"to":{"index":0},"amount":"40000"},{"to":{"address":BTC0},"amount":"50000"}]),
+    ));
+    assert!(e.contains("Two outputs return change"), "{e}");
+    // EVM has no change: paying the payer back stays refused, by index too
+    let e = refusal(&evm(json!([eth(json!({"index":0}), "1000", 0, "1000000000")])));
+    assert!(e.contains("goes back to the account that pays"), "{e}");
 }
 
 #[test]

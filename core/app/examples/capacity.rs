@@ -1,8 +1,8 @@
 //! Bytes per frame of the phone's code at each grid size, and what real messages need: the
-//! accounts of one account number, and of all 100 (`ACCOUNTS`), on both networks; signed
+//! accounts of one account number, and of a page of 100 (`PAGE`), on both networks; signed
 //! replies of one transaction and of many. For each, the frames a reader needs at each grid
 //! when it catches every frame (the sender's real schedule, into a real receiver).
-use airkeys::app::ACCOUNTS;
+use airkeys::app::PAGE;
 use airkeys_wallet::protocol::{Account, Message, Signed, SignedTx};
 use airkeys_wallet::{Mnemonic, Network, Wallet};
 use lumen::transfer::{Receiver, Sender, prepare};
@@ -47,7 +47,7 @@ fn main() {
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let w = Wallet::new(&Mnemonic::parse(phrase).unwrap().seed("").unwrap()).unwrap();
     let mut messages = Vec::new();
-    for (what, indexes) in [("account #7", 7..8), ("accounts #0-#99", 0..ACCOUNTS)] {
+    for (what, indexes) in [("account #7", 7..8), ("accounts #0-#99", 0..PAGE)] {
         let accounts = indexes
             .flat_map(|i| {
                 Network::ALL.map(|network| Account {

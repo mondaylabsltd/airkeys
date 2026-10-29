@@ -71,19 +71,19 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["0xF23521DE…7Bf5e158"].waitForExistence(timeout: 3), "and back at 0, account #0")
 
         app.buttons["Connect"].tap()
-        XCTAssertTrue(app.staticTexts["All 100 accounts"].waitForExistence(timeout: 3), "the Connect screen offers all accounts")
+        XCTAssertTrue(app.staticTexts["Accounts #0 to #99"].waitForExistence(timeout: 3), "the Connect screen offers the page of the wheel's account")
         shot("i04-connect")
         app.buttons["Show code"].tap()
         XCTAssertTrue(app.staticTexts["Show this to the web app"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Accounts #0 to #99 · Bitcoin, Ethereum & EVM · addresses only"].exists, "all 100 accounts, by default")
-        // all 100 accounts take about 10 frames of the code: enough screenshots to read it
+        XCTAssertTrue(app.staticTexts["Accounts #0 to #99 · Bitcoin, Ethereum & EVM · addresses only"].exists, "the page of 100 accounts, by default")
+        // a page of 100 accounts takes about 10 frames of the code: enough screenshots to read it
         if Self.shooting {
             for n in 0 ..< 24 {
                 shot("code-accounts-\(n)")
                 Thread.sleep(forTimeInterval: 0.15)
             }
         }
-        // the message of all 100 accounts: about a thousand lines, drawn as they come into view
+        // the message of 100 accounts: about a thousand lines, drawn as they come into view
         app.buttons["Message"].tap()
         XCTAssertTrue(app.staticTexts["\"airkeys\": 1,"].waitForExistence(timeout: 5), "the JSON, a line at a time")
         shot("i04-message")
@@ -116,6 +116,32 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Ethereum & EVM"].waitForExistence(timeout: 3))
         app.buttons["Close wallet"].tap()
         XCTAssertTrue(app.buttons["Enter recovery phrase"].waitForExistence(timeout: 3), "closing forgets the wallet")
+    }
+
+    /// The wheel holds a page of 100 accounts; the next page is a tap away, and Connect follows it.
+    func testPagesOfAccounts() {
+        let app = XCUIApplication()
+        app.launchEnvironment["AIRKEYS_ASSUME_OFFLINE"] = "1"
+        app.launch()
+        app.buttons["Enter recovery phrase"].tap()
+        let field = app.textViews["abandon ability …"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText(String(repeating: "aban ", count: 11) + "abou")
+        app.buttons["Continue"].tap()
+        XCTAssertTrue(app.buttons["Open wallet"].waitForExistence(timeout: 3))
+        app.buttons["Open wallet"].tap()
+        XCTAssertTrue(app.staticTexts["#0 – #99"].waitForExistence(timeout: 5), "the first page")
+        XCTAssertFalse(app.buttons["Previous 100 accounts"].isEnabled, "no page before the first")
+        app.buttons["Next 100 accounts"].tap()
+        XCTAssertTrue(app.staticTexts["#100 – #199"].waitForExistence(timeout: 3), "the next page")
+        shot("i07-page-2")
+        app.buttons["Connect"].tap()
+        XCTAssertTrue(app.staticTexts["Accounts #100 to #199"].waitForExistence(timeout: 3), "Connect offers the wheel's page")
+        app.buttons["Back"].tap()
+        app.buttons["Previous 100 accounts"].tap()
+        XCTAssertTrue(app.staticTexts["#0 – #99"].waitForExistence(timeout: 3))
+        app.buttons["Close wallet"].tap()
     }
 
     /// A mistyped word, fixed by tapping it in the grid and typing it again.
@@ -172,7 +198,7 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["扫描请求"].exists)
         shot("zh03-home")
         app.buttons["连接"].tap()
-        XCTAssertTrue(app.staticTexts["全部 100 个账户"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["账户 #0 到 #99"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["向网页助手显示你的账户"].exists)
         shot("zh04-connect")
         app.buttons["显示动态码"].tap()

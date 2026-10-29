@@ -1,8 +1,9 @@
 // Bitcoin end to end: a regtest Bitcoin Core node validates what the phone signs.
 // Account #0 receives three coins (in segwit transactions, so `prevTx` carries witnesses);
 // the phone spends all of them to a P2TR, a P2PKH and a P2SH recipient, with the change to
-// account #1. The node must accept it (testmempoolaccept, then a block), and refused requests
-// must be refused — the fee-attack one above all.
+// account #1; then account #1 pays with its change coming back to itself, as a plain cold
+// wallet does. The node must accept both (testmempoolaccept, then a block), and refused
+// requests must be refused — the fee-attack one above all.
 //
 //   BITCOIND=/path/to/bitcoind node e2e/bitcoin.mjs
 import fs from 'node:fs';
@@ -84,6 +85,26 @@ try {
 	const left = await node('scantxoutset', 'start', [`addr(${toRegtest(a0)})`]);
 	check(left.unspents.length === 0, 'account #0 is empty: nothing stays at the exposed address');
 
+	// a plain cold wallet: account #1 pays, and its change comes back to account #1
+	const prevTx = await node('getrawtransaction', txid, false);
+	const fee2 = 200 * 5;
+	const paid = 1_000_000;
+	const kept = change - paid - fee2;
+	const coldRequest = {
+		airkeys: 1, type: 'sign', id: 'btc-change-back', network: 'bitcoin',
+		from: { index: 1, address: a1 },
+		inputs: [{ txid, vout: 3, amount: String(change), prevTx }],
+		outputs: [{ to: { address: taproot }, amount: String(paid) }, { to: { index: 1 }, amount: String(kept) }],
+	};
+	const cold = phone([], coldRequest);
+	check(cold.txs.length === 1 && !(cold.accounts ?? []).length, 'the phone signs change back to the paying account, reporting no new account');
+	const [coldAccept] = await node('testmempoolaccept', [cold.txs[0].raw]);
+	check(coldAccept.allowed === true, `Bitcoin Core accepts it (${coldAccept['reject-reason'] ?? `vsize ${coldAccept.vsize}`})`);
+	await node('sendrawtransaction', cold.txs[0].raw);
+	await mine(1);
+	const stays = await node('scantxoutset', 'start', [`addr(${toRegtest(a1)})`]);
+	check(stays.unspents.length === 1 && sats(stays.unspents[0].amount) === kept, 'mined: the change sits on account #1 again');
+
 	// what the phone refuses
 	const lie = structuredClone(request);
 	lie.inputs[0].amount = String(Number(lie.inputs[0].amount) - 10_000);
@@ -92,8 +113,12 @@ try {
 	swap.inputs[0].prevTx = request.inputs[1].prevTx;
 	check(/previous transaction is not/.test(phoneRefuses(swap)), 'refuses a previous transaction with another txid');
 	const back = structuredClone(request);
-	back.outputs[3].to = { address: a0 };
-	check(/goes back to the account that pays/.test(phoneRefuses(back)), 'refuses change to the paying address');
+	back.outputs[3].to = { address: a0.toUpperCase() };
+	check(/goes back to the account that pays/.test(phoneRefuses(back)), 'refuses the paying address in another spelling');
+	const twice = structuredClone(request);
+	twice.outputs[2].to = { index: 0 };
+	twice.outputs[3].to = { address: a0 };
+	check(/Two outputs return change/.test(phoneRefuses(twice)), 'refuses change back to the payer twice');
 	const dust = structuredClone(request);
 	dust.outputs[0].amount = '329';
 	check(/dust/.test(phoneRefuses(dust)), 'refuses an output below the dust limit');

@@ -86,7 +86,7 @@ enum Phase {
     },
     Connect {
         selected: [bool; 2],
-        /// Every account number (`0..ACCOUNTS`), or only the one on the home screen.
+        /// The page of `PAGE` accounts that holds the one on the home screen, or only that one.
         all: bool,
     },
     Code {
@@ -221,7 +221,17 @@ const RADIOS: [(RadioKind, Words, Words, Words); 4] = [
 
 /// The account numbers the phone offers to show and connect: #0 to #99, one turn of the
 /// home screen's wheel. Signing is not limited: a request names its own account.
-pub const ACCOUNTS: u32 = 100;
+pub const ACCOUNTS: u32 = 10_000;
+/// Accounts shown to the web app at once: a page, #0–#99, #100–#199 and so on. One code carries
+/// one page of both networks (200 accounts, the most an `accounts` message holds, PROTOCOL §4);
+/// the page is the one the home screen's wheel is on.
+pub const PAGE: u32 = 100;
+
+/// The page that holds account `index`.
+pub fn page_of(index: u32) -> std::ops::Range<u32> {
+    let start = index / PAGE * PAGE;
+    start..(start + PAGE).min(ACCOUNTS)
+}
 
 fn network_name(n: Network) -> Words {
     match n {
@@ -486,6 +496,14 @@ impl Airkeys {
 
             // ---------------------------------------------------------- accounts
             Action::Account { index } if open && index < ACCOUNTS => model.index = index,
+            Action::Page { next } if open => {
+                let first = page_of(model.index).start;
+                model.index = if next {
+                    if first + PAGE < ACCOUNTS { first + PAGE } else { first }
+                } else {
+                    first.saturating_sub(PAGE)
+                };
+            }
             Action::OpenAccount { network } if open => {
                 model.phase = Phase::Account { network: network.into() }
             }
@@ -515,7 +533,7 @@ impl Airkeys {
                 if let Phase::Connect { selected, all } = model.phase {
                     let networks: Vec<Network> =
                         Network::ALL.iter().zip(selected).filter(|(_, s)| *s).map(|(n, _)| *n).collect();
-                    let indexes = if all { 0..ACCOUNTS } else { model.index..model.index + 1 };
+                    let indexes = if all { page_of(model.index) } else { model.index..model.index + 1 };
                     if networks.is_empty() {
                         model.toast = Some(text!("Choose at least one network.", "至少选择一个网络。"));
                     } else {
@@ -841,6 +859,16 @@ impl App for Airkeys {
             (Phase::Home, Some(w)) => Screen::Home {
                 index: model.index,
                 accounts: Network::ALL.iter().map(|&n| account_row(w, n, model.index, lang)).collect(),
+                page: {
+                    let p = page_of(model.index);
+                    WheelPage {
+                        first: p.start,
+                        last: p.end - 1,
+                        label: format!("#{} – #{}", p.start, p.end - 1),
+                        previous: p.start > 0,
+                        next: p.end < ACCOUNTS,
+                    }
+                },
             },
             (Phase::Account { network }, Some(w)) => {
                 Screen::Account { account: account_row(w, *network, model.index, lang) }
@@ -856,11 +884,15 @@ impl App for Airkeys {
                     },
                     ScopeChoice {
                         all: true,
-                        title: say(&text!("All {ACCOUNTS} accounts", "全部 {ACCOUNTS} 个账户")),
+                        title: say(&text!(
+                            "Accounts #{} to #{}",
+                            "账户 #{} 到 #{}",
+                            page_of(model.index).start,
+                            page_of(model.index).end - 1
+                        )),
                         detail: say(&text!(
-                            "#0 to #{}, for every balance. The web app and the services it reads balances from can tell these addresses belong together.",
-                            "#0 到 #{}，可查看全部余额。网页助手和它查询余额所用的服务能看出这些地址属于同一个钱包。",
-                            ACCOUNTS - 1
+                            "{PAGE} accounts, for every balance. For another {PAGE}, turn the wheel on the home screen to them first. The web app and the services it reads balances from can tell these addresses belong together.",
+                            "{PAGE} 个账户，可查看全部余额。要连接另外 {PAGE} 个，先在首页把滚轮转到那里。网页助手和它查询余额所用的服务能看出这些地址属于同一个钱包。"
                         )),
                         selected: *all,
                     },

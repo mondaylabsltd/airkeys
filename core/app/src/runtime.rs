@@ -181,7 +181,8 @@ pub fn code_fps() -> u32 {
     CODE_FPS
 }
 
-/// How many account numbers the home screen offers: #0 to `account_count() - 1`.
+/// How many account numbers the phone offers: #0 to `account_count() - 1`, a page of 100 at a
+/// time on the home screen's wheel (`Screen::Home.page`).
 #[uniffi::export]
 pub fn account_count() -> u32 {
     crate::app::ACCOUNTS

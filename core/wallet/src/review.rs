@@ -87,8 +87,10 @@ struct Accounts<'a> {
 }
 
 impl Accounts<'_> {
-    /// Resolves a target to (address, own index); refuses the paying account itself.
-    fn resolve(&mut self, t: &Target) -> Result<(String, Option<u32>)> {
+    /// Resolves a target to (address, own index); refuses the paying account itself, unless
+    /// `change_back`: a Bitcoin output may return change to it, named by its index or by its
+    /// address exactly as §3 writes it (any other spelling of the same key is still refused).
+    fn resolve(&mut self, t: &Target, change_back: bool) -> Result<(String, Option<u32>)> {
         let (address, own) = match (t.index, &t.address) {
             (None, None) => bail!(
                 "A recipient has neither an address nor an account number.",
@@ -107,6 +109,8 @@ impl Accounts<'_> {
                         shown(a)
                     ),
                     Some(_) => {}
+                    // the paying account is known: nothing new to report
+                    None if i == self.from => {}
                     None => {
                         let acc = Account { network: self.network, index: i, address: derived.clone() };
                         if !self.new.contains(&acc) {
@@ -117,6 +121,11 @@ impl Accounts<'_> {
                 (derived, Some(i))
             }
         };
+        // the paying address itself, as §3 writes it: change coming back
+        let own = if own.is_none() && address == self.from_address { Some(self.from) } else { own };
+        if change_back && own == Some(self.from) {
+            return Ok((address, own));
+        }
         if own == Some(self.from) || self.pays_from(&address) {
             bail!(
                 "A transfer goes back to the account that pays. This transaction reveals that account's public key, so the funds would be exposed.",
@@ -327,8 +336,19 @@ fn review_bitcoin(b: &BitcoinSign, wallet: &Wallet, accounts: &mut Accounts, r: 
 
     let mut outputs = Vec::new();
     let (mut total_out, mut sent): (u64, u64) = (0, 0);
+    // change back to the paying account, at most once
+    let mut back = false;
     for o in &b.outputs {
-        let (address, own) = accounts.resolve(&o.to)?;
+        let (address, own) = accounts.resolve(&o.to, true)?;
+        if own == Some(accounts.from) {
+            if back {
+                bail!(
+                    "Two outputs return change to the account that pays.",
+                    "有两个输出把找零退回付款账户。"
+                );
+            }
+            back = true;
+        }
         let parsed = bitcoin::parse_address(&address)?;
         let Some(value) = o.amount.to_u64() else {
             bail!("{} sat is more than exists.", "{} sat 超出了可能的范围。", o.amount.as_str())
@@ -354,7 +374,13 @@ fn review_bitcoin(b: &BitcoinSign, wallet: &Wallet, accounts: &mut Accounts, r: 
             token: None,
             verified: true,
             fee: None,
-            note: own.map(|_| text!("Change", "找零")),
+            note: own.map(|i| {
+                if i == accounts.from {
+                    text!("Change, back to this account", "找零，退回本账户")
+                } else {
+                    text!("Change", "找零")
+                }
+            }),
         });
         outputs.push(bitcoin::Output { value, script: parsed.script });
     }
@@ -478,7 +504,7 @@ fn review_evm(b: &EvmSign, accounts: &mut Accounts, r: &mut Review) -> Result<()
             evm::Fee::Legacy { gas_price } => gas_price,
         });
         nonzero(&t.amount)?;
-        let (address, own) = accounts.resolve(&t.to)?;
+        let (address, own) = accounts.resolve(&t.to, false)?;
         let to = evm::parse_address(&address)?;
         let to_display = evm::checksum(&to);
         let mut tx = evm::Tx {

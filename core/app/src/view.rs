@@ -53,8 +53,8 @@ pub enum Screen {
     Import { phrase: PhraseInput },
     /// The optional passphrase, then opening the wallet.
     Passphrase { passphrase: String, problem: Option<String> },
-    /// The open wallet: account number `index` on every network.
-    Home { index: u32, accounts: Vec<AccountRow> },
+    /// The open wallet: account number `index` on every network, on the wheel's `page`.
+    Home { index: u32, accounts: Vec<AccountRow>, page: WheelPage },
     /// One account: its address, path and the notice about its key.
     Account { account: AccountRow },
     /// Choosing what to show the web app: which networks, and account `index` or all of them.
@@ -168,6 +168,17 @@ pub struct AccountRow {
     pub index: u32,
     pub address: String,
     pub path: String,
+}
+
+/// The home screen's wheel shows one page of account numbers at a time: `first` to `last`.
+/// `label` ("#100 – #199") names it; `previous` and `next` say whether there is a page that way.
+#[derive(Clone, Debug, PartialEq, uniffi::Record)]
+pub struct WheelPage {
+    pub first: u32,
+    pub last: u32,
+    pub label: String,
+    pub previous: bool,
+    pub next: bool,
 }
 
 /// A network on the Connect screen, included or not.

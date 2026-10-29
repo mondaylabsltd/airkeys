@@ -23,6 +23,7 @@ object Icons {
     }.build()
 
     val back = icon("back", "M15 5l-7 7 7 7")
+    val forward = icon("forward", "M9 5l7 7-7 7")
     val scan = icon("scan", "M4 8V5a1 1 0 0 1 1-1h3", "M16 4h3a1 1 0 0 1 1 1v3", "M20 16v3a1 1 0 0 1-1 1h-3", "M8 20H5a1 1 0 0 1-1-1v-3", "M4 12h16")
     val code = icon("code", "M4 4h6v6H4z", "M14 4h6v6h-6z", "M4 14h6v6H4z", "M14 14h2v2h-2z", "M18 18h2v2h-2z", "M18 14h2", "M14 18h2")
     val lock = icon("lock", "M6 11h12v9H6z", "M8 11V8a4 4 0 0 1 8 0v3")

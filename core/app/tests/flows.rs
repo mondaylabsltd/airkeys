@@ -3,6 +3,7 @@
 //! codes rendered here. Codes the phone shows are read back with the reference scanner, so
 //! each message makes the whole trip through Lumen Code.
 
+use airkeys::app::ACCOUNTS;
 use airkeys::ops::{Action, RadioState, Request};
 use airkeys::runtime::{AirkeysCore, CameraFrame, Plane, Update};
 use airkeys::view::{Language, NetworkKind, Screen, ViewModel, WordState};
@@ -246,7 +247,7 @@ fn typing_completes_words_and_opens_the_wallet() {
     // Continue expands the last word too
     assert!(matches!(s.act(Action::PhraseDone), Screen::Passphrase { .. }), "{:?}", s.view.screen);
     s.act(Action::PassphraseInput { passphrase: "".into() });
-    let Screen::Home { index: 0, accounts } = s.act(Action::Open).clone() else {
+    let Screen::Home { index: 0, accounts, .. } = s.act(Action::Open).clone() else {
         panic!("{:?}", s.view.screen)
     };
     assert!(!s.private);
@@ -387,7 +388,7 @@ fn connect_shows_addresses_only() {
 }
 
 #[test]
-fn connect_can_show_all_100_accounts() {
+fn connect_shows_the_page_of_100_accounts_the_wheel_is_on() {
     let mut s = Shell::new();
     s.open(PHRASE, "");
     let Screen::Connect { scopes, .. } = s.act(Action::Connect).clone() else {
@@ -409,6 +410,34 @@ fn connect_can_show_all_100_accounts() {
         assert_eq!(a.address, w.address(a.network, a.index).unwrap());
     }
     eprintln!("200 addresses read back from the code in {:?}", started.elapsed());
+
+    // the wheel at #150: the page is #100 to #199
+    s.act(Action::Done);
+    s.act(Action::Account { index: 150 });
+    let Screen::Connect { scopes, .. } = s.act(Action::Connect).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    let page = scopes.iter().find(|c| c.all).unwrap();
+    assert_eq!(page.title, "Accounts #100 to #199");
+    let Screen::Code { json, caption, .. } = s.act(Action::ShowAccounts).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    assert!(caption.starts_with("Accounts #100 to #199"), "{caption}");
+    let Message::Accounts(accounts) = Message::parse(json.as_bytes()).unwrap() else { panic!() };
+    assert_eq!(accounts.len(), 200);
+    assert!(accounts.iter().all(|a| (100..200).contains(&a.index)));
+    for a in &accounts {
+        assert_eq!(a.address, w.address(a.network, a.index).unwrap());
+    }
+    // the last account the wheel offers, and its page
+    s.act(Action::Done);
+    s.act(Action::Account { index: ACCOUNTS - 1 });
+    s.act(Action::Connect);
+    let Screen::Code { caption, .. } = s.act(Action::ShowAccounts).clone() else { panic!() };
+    assert!(caption.starts_with("Accounts #9900 to #9999"), "{caption}");
+    // past it, the wheel does not move
+    s.act(Action::Done);
+    assert!(matches!(s.act(Action::Account { index: ACCOUNTS }), Screen::Home { index: 9999, .. }));
 }
 
 #[test]
@@ -439,16 +468,37 @@ fn the_code_fills_its_area() {
 }
 
 #[test]
-fn the_wheel_offers_accounts_0_to_99() {
+fn the_wheel_offers_accounts_0_to_9999() {
     let mut s = Shell::new();
     s.open(PHRASE, "");
-    assert_eq!(airkeys::runtime::account_count(), 100);
-    let Screen::Home { index: 99, accounts } = s.act(Action::Account { index: 99 }).clone() else {
+    assert_eq!(airkeys::runtime::account_count(), 10_000);
+    let Screen::Home { index: 150, accounts, page } = s.act(Action::Account { index: 150 }).clone() else {
         panic!("{:?}", s.view.screen)
     };
-    assert!(accounts.iter().all(|a| a.index == 99 && a.path.ends_with("/99'")));
+    assert!(accounts.iter().all(|a| a.index == 150 && a.path.ends_with("/150'")));
+    // the wheel shows the page that holds it, a hundred numbers
+    assert_eq!((page.first, page.last, page.label.as_str()), (100, 199, "#100 – #199"));
+    assert!(page.previous && page.next);
+    // turning the page: its first account
+    let Screen::Home { index: 200, .. } = s.act(Action::Page { next: true }).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    let Screen::Home { index: 100, .. } = s.act(Action::Page { next: false }).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    s.act(Action::Page { next: false });
+    let Screen::Home { index: 0, page, .. } = s.act(Action::Page { next: false }).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    assert!(!page.previous, "no page before the first");
+    let Screen::Home { page, .. } = s.act(Action::Account { index: 9999 }).clone() else { panic!() };
+    assert_eq!((page.first, page.next), (9900, false));
+    let Screen::Home { index: 9900, .. } = s.act(Action::Page { next: true }).clone() else {
+        panic!("{:?}", s.view.screen)
+    };
+    s.act(Action::Account { index: 150 });
     assert!(
-        matches!(s.act(Action::Account { index: 100 }), Screen::Home { index: 99, .. }),
+        matches!(s.act(Action::Account { index: 10_000 }), Screen::Home { index: 150, .. }),
         "past the wheel: ignored"
     );
 }
@@ -818,7 +868,8 @@ fn every_wallet_refusal_has_a_chinese_sentence() {
         (format!("{one},{one}"), pay(foreign_btc, 1000)),
         (one.clone(), pay(foreign_btc, 100)),
         (one.clone(), pay(foreign_btc, 100_000)),
-        (one.clone(), pay(&btc0, 1000)),
+        // the payer in another spelling (written as §3 writes it, it is change coming back)
+        (one.clone(), pay(&btc0.to_uppercase(), 1000)),
         (one.clone(), pay("bc1qnotanaddress", 1000)),
         (one.clone(), pay("tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", 1000)),
         (one.clone(), pay("bc1zw508d6qejxtdg4y5r3zarvaryvaxxpcs", 1000)),

@@ -93,8 +93,9 @@ The phone shares the accounts the person selects: one account number, or all of 
 ```
 
 `accounts` holds 1–200 entries. The address in each entry is the only key-related value.
-All 100 accounts on both networks make a 17 KB message (about 9 KB compressed), which the
-code carries in several frames.
+The phone shares accounts a page at a time: #0 to #99, #100 to #199 and so on, up to #9999.
+A page on both networks makes a 17 KB message (about 9 KB compressed), which the code carries
+in several frames.
 (The examples in this document use the accounts of the test phrase
 `abandon abandon … abandon about`.)
 
@@ -143,8 +144,12 @@ What the phone shows is what it signs.
   script of `from`. The full previous transaction stops the segwit-v0 fee attack: without
   it, an input amount is only a claim.
 - `outputs` (1–16): `to` is any mainnet P2PKH, P2SH, P2WPKH, P2WSH or P2TR address, or an
-  account of this wallet (change). An output to `from` itself is refused, because it keeps
-  coins at an address whose key the spend reveals. Each amount must meet the dust limit:
+  account of this wallet (change). At most one output may return change to `from` itself,
+  named by `{ "index": from.index }` or by its address as §3 writes it: a wallet kept as a plain
+  cold wallet keeps its coins on one account. The phone names it as change back to this
+  account; the coins then sit at an address whose key the spend reveals, which the review
+  says. `from` in any other spelling (upper case, the legacy or nested form of its key) is
+  refused. Each amount must meet the dust limit:
   294 sat for P2WPKH, 330 for P2WSH or P2TR, 540 for P2SH, 546 for P2PKH.
 - The fee is the inputs minus the outputs. It must be positive.
 - The phone fixes everything else: version 2, lock time 0, sequence `0xfffffffd`
@@ -238,6 +243,8 @@ The phone refuses a request when any of these is false:
 3. Every `{ "index", "address" }` reference matches the derivation, spelled the same way.
 4. No transfer pays `from`, however it is written: an EVM address in any case; a Bitcoin
    address in any case, or as the legacy (P2PKH) or nested (P2SH-P2WPKH) form of the same key.
+   The one exception is a Bitcoin output returning change to `from`, written as §5.1 allows,
+   at most once.
 5. Bitcoin: each `prevTx` has the stated txid and pays `amount` to `from`; every output meets
    the dust limit; the fee is positive.
 6. EVM: every amount is above zero; every gas limit is at least 21 000; nonces are consecutive

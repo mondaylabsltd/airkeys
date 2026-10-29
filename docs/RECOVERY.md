@@ -59,9 +59,10 @@ bitcoin-cli -rpcwallet=airkeys getbalance
 bitcoin-cli -rpcwallet=airkeys sendall '["bc1q…your new address"]'
 ```
 
-`importdescriptors` rescans the chain for accounts 0–99. From `"timestamp": 0` this is slow; a
-Unix time shortly before your first deposit is faster. `sendall` sweeps every coin of every
-account.
+`importdescriptors` rescans the chain for accounts 0–99. If your wallet used accounts past #99
+(the phone's Connect showed you a later page, such as #100 to #199), raise the end of the range
+to cover them, for example `[0, 999]`. From `"timestamp": 0` this is slow; a Unix time shortly
+before your first deposit is faster. `sendall` sweeps every coin of every account.
 
 ## Ethereum and EVM chains — `cast`, then any wallet
 
