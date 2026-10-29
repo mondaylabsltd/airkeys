@@ -18,57 +18,151 @@ import {
 const pad = (hex: string) => hex.replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const big = (hex: string | null) => (hex && hex !== '0x' ? BigInt(hex) : 0n);
 
-/** Calls per JSON-RPC batch: public endpoints refuse much larger ones. */
+/** Calls per JSON-RPC batch: public endpoints refuse much larger ones (a chain may ask fewer). */
 const BATCH = 50;
+const batchOf = (chain: Chain) => chain.batch ?? BATCH;
 
-/** The balances (native coin and listed tokens) and the nonce of each address on one chain,
- * in batches; a nonce above zero means the address has signed. */
+/** Multicall3, at the same address on every chain Airkeys lists: it reads many balances in one
+ * `eth_call`. */
+export const MULTICALL = '0xcA11bde05977b3631167028862bE2a173976CA11';
+/** Reads per multicall, and multicalls in flight at once to one endpoint: 1,000 reads take
+ * about 10M gas, under what public endpoints allow one `eth_call`; one that allows less gets
+ * halves (see `readAll`). */
+const PER_MULTICALL = 1000;
+const MULTICALLS_AT_ONCE = 4;
+const MIN_MULTICALL = 100;
+const GET_ETH_BALANCE = '0x4d2301cc';
+const BALANCE_OF = '0x70a08231';
+
+const word = (n: number) => n.toString(16).padStart(64, '0');
+
+/** `aggregate3(Call3[])` with every call allowed to fail; `calls` are (target, call data). */
+export function encodeAggregate3(calls: [string, string][]): string {
+	const tuples = calls.map(([to, data]) => {
+		const bytes = data.replace(/^0x/, '');
+		const len = bytes.length / 2;
+		return pad(to) + word(1) + word(0x60) + word(len) + bytes.padEnd(Math.ceil(len / 32) * 64, '0');
+	});
+	let at = calls.length * 32;
+	const offsets = tuples.map((t) => {
+		const o = word(at);
+		at += t.length / 2;
+		return o;
+	});
+	return '0x82ad56cb' + word(0x20) + word(calls.length) + offsets.join('') + tuples.join('');
+}
+
+/** What `aggregate3` answered, `(bool success, bytes data)[]`: each call's first word, or
+ * `null` where it failed or answered nothing. */
+export function decodeAggregate3(hex: string, n: number): (string | null)[] {
+	const h = hex.replace(/^0x/, '');
+	const at = (byte: number) => Number(BigInt('0x' + (h.slice(byte * 2, byte * 2 + 64) || '0')));
+	const array = at(0);
+	if (at(array) !== n) throw new Error(t.net.badAnswer);
+	return Array.from({ length: n }, (_, i) => {
+		const item = array + 32 + at(array + 32 + i * 32);
+		const data = item + at(item + 32);
+		const ok = at(item) === 1 && at(data) >= 32;
+		return ok ? '0x' + h.slice((data + 32) * 2, (data + 64) * 2) : null;
+	});
+}
+
+/** Each (target, data) call's answer: through Multicall3, a few multicalls at a time. A
+ * multicall the endpoint refuses (too much gas, too large) is asked again in halves, and below
+ * `MIN_MULTICALL` as one `eth_call` each (a chain without Multicall3); an endpoint that does not
+ * answer fails the read at once. */
+async function readAll(chain: Chain, calls: [string, string][]): Promise<(string | null)[]> {
+	const out: (string | null)[] = new Array(calls.length).fill(null);
+	const chunks: [number, number][] = [];
+	for (let i = 0; i < calls.length; i += PER_MULTICALL)
+		chunks.push([i, Math.min(i + PER_MULTICALL, calls.length)]);
+	// an answer that refuses the call, as opposed to no answer at all
+	const refused = (e: unknown) => /^eth_call:|HTTP 413/.test((e as Error).message);
+
+	async function read([from, to]: [number, number]): Promise<void> {
+		try {
+			const r = await rpc<string>(chain.rpc, 'eth_call', [
+				{ to: MULTICALL, data: encodeAggregate3(calls.slice(from, to)) },
+				'latest'
+			]);
+			decodeAggregate3(r, to - from).forEach((x, k) => (out[from + k] = x));
+			return;
+		} catch (e) {
+			if (!refused(e) && !(e as Error).message.startsWith(t.net.badAnswer)) throw e;
+			if (to - from > MIN_MULTICALL) {
+				const mid = from + Math.ceil((to - from) / 2);
+				await read([from, mid]);
+				await read([mid, to]);
+				return;
+			}
+		}
+		for (let j = from; j < to; j += batchOf(chain)) {
+			if (j > from) await new Promise((ok) => setTimeout(ok, 300));
+			const res = await rpcBatch(
+				chain.rpc,
+				calls
+					.slice(j, Math.min(j + batchOf(chain), to))
+					.map(([target, data]): [string, unknown[]] =>
+						// Multicall3's getEthBalance, without Multicall3
+						target === MULTICALL && data.startsWith(GET_ETH_BALANCE)
+							? ['eth_getBalance', ['0x' + data.slice(-40), 'latest']]
+							: ['eth_call', [{ to: target, data }, 'latest']]
+					)
+			);
+			res.forEach((x, k) => (out[j + k] = x));
+		}
+	}
+
+	let next = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(MULTICALLS_AT_ONCE, chunks.length) }, async () => {
+			while (next < chunks.length) await read(chunks[next++]);
+		})
+	);
+	return out;
+}
+
+/** The balances (native coin and listed tokens) and the nonce of each address on one chain; a
+ * nonce above zero means the address has signed. */
 export async function scan(
 	chain: Chain,
 	addresses: string[]
 ): Promise<Map<string, { assets: Asset[]; nonce: bigint | null }>> {
-	const per = 2 + chain.tokens.length;
-	const group = Math.max(1, Math.floor(BATCH / per));
-	const out = new Map<string, { assets: Asset[]; nonce: bigint | null }>();
-	for (let i = 0; i < addresses.length; i += group) {
-		// a pause between batches to one endpoint keeps under public rate limits
-		if (i) await new Promise((ok) => setTimeout(ok, 300));
-		const some = addresses.slice(i, i + group);
-		const res = await rpcBatch(
-			chain.rpc,
-			some.flatMap((a): [string, unknown[]][] => [
-				['eth_getBalance', [a, 'latest']],
-				['eth_getTransactionCount', [a, 'latest']],
-				...chain.tokens.map((t): [string, unknown[]] => [
-					'eth_call',
-					[{ to: t.address, data: '0x70a08231' + pad(a) }, 'latest']
-				])
+	const per = 1 + chain.tokens.length;
+	const [balances, signed] = await Promise.all([
+		readAll(
+			chain,
+			addresses.flatMap((a): [string, string][] => [
+				[MULTICALL, GET_ETH_BALANCE + pad(a)],
+				...chain.tokens.map((tk): [string, string] => [tk.address, BALANCE_OF + pad(a)])
 			])
-		);
-		some.forEach((a, k) => {
-			const r = res.slice(k * per, (k + 1) * per);
-			out.set(a, {
-				assets: [
-					{
-						key: `${chain.chainId}:native`,
-						chain,
-						symbol: chain.symbol,
-						decimals: chain.decimals,
-						amount: big(r[0])
-					},
-					...chain.tokens.map((t, j): Asset => ({
-						key: `${chain.chainId}:${t.address}`,
-						chain,
-						token: t,
-						symbol: t.symbol,
-						decimals: t.decimals,
-						amount: big(r[j + 2])
-					}))
-				],
-				nonce: r[1] === null ? null : big(r[1])
-			});
+		),
+		nonces(chain, addresses)
+	]);
+	const out = new Map<string, { assets: Asset[]; nonce: bigint | null }>();
+	addresses.forEach((a, k) => {
+		const r = balances.slice(k * per, (k + 1) * per);
+		out.set(a, {
+			assets: [
+				{
+					key: `${chain.chainId}:native`,
+					chain,
+					symbol: chain.symbol,
+					decimals: chain.decimals,
+					amount: big(r[0])
+				},
+				...chain.tokens.map((tk, j): Asset => ({
+					key: `${chain.chainId}:${tk.address}`,
+					chain,
+					token: tk,
+					symbol: tk.symbol,
+					decimals: tk.decimals,
+					amount: big(r[j + 1])
+				}))
+			],
+			nonce: signed.get(a) ?? null
 		});
-	}
+	});
 	return out;
 }
 
@@ -78,9 +172,9 @@ export async function nonces(
 	addresses: string[]
 ): Promise<Map<string, bigint | null>> {
 	const out = new Map<string, bigint | null>();
-	for (let i = 0; i < addresses.length; i += BATCH) {
+	for (let i = 0; i < addresses.length; i += batchOf(chain)) {
 		if (i) await new Promise((ok) => setTimeout(ok, 300));
-		const some = addresses.slice(i, i + BATCH);
+		const some = addresses.slice(i, i + batchOf(chain));
 		const res = await rpcBatch(
 			chain.rpc,
 			some.map((a): [string, unknown[]] => ['eth_getTransactionCount', [a, 'latest']])
@@ -156,6 +250,9 @@ async function gasFor(
 	return est === 21000 ? 21000 : Math.ceil(est * 1.2);
 }
 
+/** Transactions one request may hold: the phone's limit (core/wallet/src/review.rs). */
+export const MAX_TXS = 16;
+
 const tokenRef = (t: Token) => ({ address: t.address, symbol: t.symbol, decimals: t.decimals });
 
 export async function prepare(i: SendIntent): Promise<Prepared> {
@@ -185,24 +282,37 @@ export async function prepare(i: SendIntent): Promise<Prepared> {
 	const txs: Record<string, unknown>[] = [];
 	const summary: string[] = [];
 	let fees = 0n; // the most all transactions can cost in fees
+	let restFees = 0n; // of which, moving the rest
 	let values = 0n; // native coin sent
 	const balance = i.holdings.find((a) => !a.token)?.amount ?? 0n;
 	const room = () => balance - fees - values;
 	/** The most one transaction can cost: its gas, and its layer-1 data fee where there is one. */
 	const cost = (gas: number | bigint) => BigInt(gas) * price + l1;
 
-	const push = (tx: Record<string, unknown>, gas: number, line: string) => {
+	const push = (tx: Record<string, unknown>, gas: number, line: string, rest = false) => {
 		txs.push({ ...tx, nonce: nonce++, gas, ...fee });
 		fees += cost(gas);
+		if (rest) restFees += cost(gas);
 		if (!tx.token) values += BigInt(tx.amount as string);
 		summary.push(line);
 	};
 
 	// the transfer asked for first; tokens that move next; the native coin that moves last
-	const moving =
+	const tokens =
 		i.moveRest === null
 			? []
 			: i.holdings.filter((a) => a.token && a.amount > 0n && (i.moveAll || a.key !== i.asset.key));
+	// one request holds at most MAX_TXS transactions (the phone refuses more): the send, the coin
+	// that moves last, and as many tokens as fit between, in the registry's order; the rest stay
+	// for another request
+	const fit =
+		MAX_TXS -
+		(i.moveAll ? 0 : 1) -
+		(i.moveRest !== null ? 1 : 0) -
+		// the rest of a token sent, moving right after it
+		(!i.moveAll && i.asset.token && i.moveRest !== null ? 1 : 0);
+	const moving = tokens.slice(0, fit);
+	const staying = tokens.slice(fit);
 	if (i.moveAll) {
 		// nothing is paid: every token, then the coin, moves below
 	} else if (i.asset.token) {
@@ -241,7 +351,8 @@ export async function prepare(i: SendIntent): Promise<Prepared> {
 		push(
 			{ to: own(i.moveRest!), amount: a.amount.toString(), token: tokenRef(a.token!) },
 			gas,
-			t.chains.moveTo(`${formatUnits(a.amount, a.decimals)} ${a.symbol}`, i.moveRest!)
+			t.chains.moveTo(`${formatUnits(a.amount, a.decimals)} ${a.symbol}`, i.moveRest!),
+			true
 		);
 	}
 	if (i.moveRest !== null) {
@@ -250,7 +361,8 @@ export async function prepare(i: SendIntent): Promise<Prepared> {
 			push(
 				{ to: own(i.moveRest), amount: left.toString() },
 				coinGas,
-				t.chains.moveTo(`${formatUnits(left, chain.decimals)} ${chain.symbol}`, i.moveRest)
+				t.chains.moveTo(`${formatUnits(left, chain.decimals)} ${chain.symbol}`, i.moveRest),
+				true
 			);
 	}
 	if (!txs.length) throw new Error(t.chains.nothingToMove);
@@ -262,7 +374,18 @@ export async function prepare(i: SendIntent): Promise<Prepared> {
 			)
 		);
 	const request = signRequest('evm', i.from, { chainId: chain.chainId, txs });
-	return { request, summary, fee: `≤ ${formatUnits(fees, chain.decimals)} ${chain.symbol}` };
+	return {
+		request,
+		summary,
+		fee: `≤ ${formatUnits(fees, chain.decimals)} ${chain.symbol}`,
+		...(staying.length
+			? { left: t.chains.stayBehind(staying.map((a) => a.symbol).join(', ')) }
+			: {}),
+		// a send that also moves the rest: what the moves add to its fee
+		...(!i.moveAll && restFees > 0n
+			? { restFee: `≤ ${formatUnits(restFees, chain.decimals)} ${chain.symbol}` }
+			: {})
+	};
 }
 
 export async function broadcast(chain: Chain, raws: string[]): Promise<Broadcast[]> {

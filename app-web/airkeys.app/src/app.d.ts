@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The web app's view, by its place in this tab's history (lib/app/App.svelte). */
+			view?: number;
+		}
 		// interface Platform {}
 	}
 }

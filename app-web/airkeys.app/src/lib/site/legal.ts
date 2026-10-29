@@ -134,7 +134,7 @@ export const en: Legal = {
 				paragraphs: [
 					'The web companion runs in your browser. It keeps the addresses your phone shared and your settings in your browser’s local storage, on your computer only, until you remove them. It sets no cookies and loads no analytics or third-party scripts. The camera is used in the browser to read the phone’s codes; images are not uploaded or stored.',
 					'To show balances and send transactions, your browser connects directly to blockchain endpoints: by default public services listed in Airkeys (such as mempool.space, blockstream.info and publicnode.com), or the nodes you set in Settings. Those services see your IP address and the addresses asked about, and can tell that addresses asked about together belong together. Using your own nodes avoids this.',
-					'To show values in currencies other than US dollars, the web companion fetches exchange rates from Vela’s exchange-rate service; when you add a network, it fetches that network’s details from ethereum-data.getvela.app. Neither request includes an address. Token prices in US dollars come from Chainlink feeds, read through the same blockchain endpoints.'
+					'To show values in currencies other than US dollars, the web companion fetches exchange rates from Vela’s exchange-rate service; when you add a network or a token, it fetches its details from ethereum-data.getvela.app, and it shows token and network logos from the same site. None of these requests includes an address. Token prices in US dollars come from Chainlink feeds, read through the same blockchain endpoints.'
 				]
 			},
 			{
@@ -287,7 +287,7 @@ export const zh: Legal = {
 				paragraphs: [
 					'网页助手在你的浏览器里运行。它把手机分享的地址和你的设置保存在浏览器的本地存储中，只在你的电脑上，直到你删除为止。它不设置 Cookie，也不加载任何统计分析或第三方脚本。浏览器中的摄像头用于读取手机的动态码，图像不会上传或保存。',
 					'为了显示余额和发送交易，你的浏览器会直接连接区块链节点：默认是 Airkeys 列出的公共服务（如 mempool.space、blockstream.info 和 publicnode.com），也可以是你在“设置”中指定的节点。这些服务能看到你的 IP 地址和所查询的地址，并能推断出一起查询的地址属于同一个人。使用自己的节点可以避免这一点。',
-					'为了以美元以外的货币显示金额，网页助手会从 Vela 的汇率服务获取汇率；添加网络时，会从 ethereum-data.getvela.app 获取该网络的信息。这两类请求都不包含任何地址。代币的美元价格来自 Chainlink 喂价，通过同样的区块链节点读取。'
+					'为了以美元以外的货币显示金额，网页助手会从 Vela 的汇率服务获取汇率；添加网络或代币时，会从 ethereum-data.getvela.app 获取它们的信息，代币和网络的图标也来自这个网站。这些请求都不包含任何地址。代币的美元价格来自 Chainlink 喂价，通过同样的区块链节点读取。'
 				]
 			},
 			{

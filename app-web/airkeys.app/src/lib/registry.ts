@@ -31,6 +31,8 @@ export interface Chain {
 	explorer: Explorer;
 	tokens: Token[];
 	testnet?: boolean;
+	/** Calls per JSON-RPC batch, for an endpoint that refuses the usual 50. */
+	batch?: number;
 }
 
 type Raw = { rpc?: string; api?: string; tokens?: Token[] } & Omit<Chain, 'rpc' | 'tokens'>;

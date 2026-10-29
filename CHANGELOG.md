@@ -7,6 +7,42 @@ message changes.
 
 ## [Unreleased]
 
+### Added
+
+- 23 EVM mainnets and 8 testnets, after Vela Wallet's list (Monad, Robinhood Chain, Arc, X
+  Layer, Mantle, Gnosis, World Chain, Celo, Unichain, Ink, Soneium, Kaia, Stable, MegaETH,
+  Plume, XRPL EVM and the testnets of the chains listed before), with their stablecoins,
+  wrapped coins and best-known tokens; Chainlink prices for LINK, UNI, AAVE, stETH, CRV, MKR,
+  COMP, PYUSD and EURC, and bridged stablecoins valued at par.
+- About 300 tokens built in: on each network the tokens with the largest market caps (CoinGecko)
+  whose address a second source (ethereum-data.getvela.app's token list, or Vela Wallet's)
+  agrees on, symbol and decimals read from each contract.
+- Tokens added by hand in Settings, found by name in ethereum-data.getvela.app's token list or
+  by contract address; token and network logos from the same site.
+- The web app reads balances again every minute while they are on screen, and when its page
+  comes back into view.
+- Bunker mode can be turned off in Settings, to use Airkeys as a plain cold wallet: a send moves
+  only what is entered, receiving stays on one account, and Home asks nothing to move. With it
+  on, Review shows what moving the rest adds to the fee.
+- Accounts by page: the phone's wheel goes to #9999, and Connect shows the page of 100 that the
+  wheel is on (#0 to #99, #100 to #199…), so a code still carries 100 accounts per network.
+  Home asks for the next page, by number, before bunker mode runs out of unused accounts.
+- Protocol: one Bitcoin output may return change to the paying account, named by its index or
+  its address as §3 writes it; the phone names it as change back to this account. Any other
+  spelling of the payer is still refused, and EVM transfers to the payer too. Phones before
+  this refuse such a request; the message format is unchanged.
+
+### Changed
+
+- The web app's views are in the browser's history: Back and Forward move between them, and
+  either network button leads to that network's Home.
+- Balances are read through Multicall3, 1,000 per call and four calls at a time.
+- A transfer request holds at most 16 transactions, as the phone requires; tokens past that
+  stay for a second request, and Review says which.
+- Home groups moves worth less than one unit of the currency; an account lists its assets by
+  chain, most valuable first; Settings folds the other mode's networks away; on a computer the
+  code fits the window with its buttons.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

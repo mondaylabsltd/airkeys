@@ -1,4 +1,5 @@
-// Balances and key exposure per address, fetched on demand and kept for the session.
+// Balances and key exposure per address, fetched on demand, kept for the session and read again
+// in the background while on screen.
 import { load, type Look } from './chains';
 import type { Account } from './protocol';
 import type { Network } from './registry';
@@ -12,6 +13,8 @@ export interface Holding extends Look {
 }
 
 const cache = $state<Record<string, Holding>>({});
+/** When each holding was last read, by the same key: for the refresh in the background. */
+const readAt = new Map<string, number>();
 // per mode: what a test network holds never mixes with what the real ones hold
 const key = (a: Account) => `${store.settings.testnet ? 'test' : 'main'}:${a.network}:${a.address}`;
 const blank = { assets: [], failed: [], exposure: 'unknown' as const, used: false };
@@ -26,7 +29,7 @@ export function holdingOf(a: Account): Holding | undefined {
 	return cache[key(a)];
 }
 
-async function round(network: Network, accounts: Account[]) {
+async function round(network: Network, accounts: Account[], quiet = false) {
 	let looks = new Map<string, Look>();
 	let failed = t.common.noAnswerAtAll;
 	try {
@@ -38,24 +41,30 @@ async function round(network: Network, accounts: Account[]) {
 		failed = (e as Error).message;
 	}
 	for (const a of accounts) {
-		cache[key(a)] = {
-			...(looks.get(a.address) ?? { ...blank, failed: [failed] }),
-			loading: false
-		};
+		const look = looks.get(a.address) ?? { ...blank, failed: [failed] };
+		const before = cache[key(a)];
+		// in the background, a read that missed a chain does not replace a complete one: it is
+		// tried again at the next check
+		if (quiet && look.failed.length && before && !before.loading && !before.failed.length) continue;
+		cache[key(a)] = { ...look, loading: false };
+		readAt.set(key(a), Date.now());
 	}
 }
 
 /** Loads these accounts' holdings (again); it never fails: an account that could not be read
  * says why. With `gap`, Bitcoin accounts are read in order and the reading stops after `GAP`
- * unused ones in a row; the rest are marked skipped. */
-export async function refresh(accounts: Account[], gap = false) {
-	for (const a of accounts)
-		cache[key(a)] = { ...(cache[key(a)] ?? blank), loading: true, skipped: false };
+ * unused ones in a row; the rest are marked skipped. `quiet` leaves what is shown as it is
+ * until the new figures arrive (the refresh in the background). */
+export async function refresh(accounts: Account[], gap = false, quiet = false) {
+	if (!quiet)
+		for (const a of accounts)
+			cache[key(a)] = { ...(cache[key(a)] ?? blank), loading: true, skipped: false };
 	const evm = accounts.filter((a) => a.network === 'evm');
 	const btc = accounts.filter((a) => a.network === 'bitcoin').sort((a, b) => a.index - b.index);
 	await Promise.all([
 		(async () => {
-			for (let i = 0; i < evm.length; i += ROUND) await round('evm', evm.slice(i, i + ROUND));
+			for (let i = 0; i < evm.length; i += ROUND)
+				await round('evm', evm.slice(i, i + ROUND), quiet);
 		})(),
 		(async () => {
 			let unused = 0;
@@ -65,7 +74,7 @@ export async function refresh(accounts: Account[], gap = false) {
 					return;
 				}
 				const some = btc.slice(i, i + 3);
-				await round('bitcoin', some);
+				await round('bitcoin', some, quiet);
 				for (const a of some) {
 					// (gone when the mode switched meanwhile)
 					const h = cache[key(a)];
@@ -74,6 +83,43 @@ export async function refresh(accounts: Account[], gap = false) {
 			}
 		})()
 	]);
+}
+
+/** How often what is on screen is read again, and the check for it. */
+const STALE_MS = 60_000;
+const CHECK_MS = 15_000;
+let background = false;
+
+/** While on screen: reads `accounts` again, quietly, once they are a minute old, and when the
+ * page comes back into view; prices too (`refreshPrices` keeps its own pace). Returns the stop,
+ * for an `$effect`. */
+export function keepFresh(accounts: () => Account[], gap = false, also?: () => void) {
+	const tick = () => {
+		if (document.hidden || background) return;
+		also?.();
+		const now = Date.now();
+		const stale = accounts().filter((a) => {
+			const h = cache[key(a)];
+			return h && !h.loading && now - (readAt.get(key(a)) ?? 0) > STALE_MS;
+		});
+		if (!stale.length) return;
+		background = true;
+		void refresh(stale, gap, true).finally(() => (background = false));
+	};
+	const timer = setInterval(tick, CHECK_MS);
+	document.addEventListener('visibilitychange', tick);
+	addEventListener('focus', tick);
+	return () => {
+		clearInterval(timer);
+		document.removeEventListener('visibilitychange', tick);
+		removeEventListener('focus', tick);
+	};
+}
+
+/** Forgets what was read of a network's accounts, so they are read again: after a token was
+ * added or removed. */
+export function forget(network: Network) {
+	for (const k of Object.keys(cache)) if (k.split(':')[1] === network) delete cache[k];
 }
 
 /** Loads the accounts not loaded yet, Bitcoin up to the gap. */

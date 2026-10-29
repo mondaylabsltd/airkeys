@@ -11,6 +11,9 @@ export interface Settings {
 	rpc: Record<string, string>;
 	/** EVM chains added by hand. */
 	chains: Chain[];
+	/** ERC-20 tokens added by hand, per chain key ("evm:<chainId>"): never priced, and the
+	 * phone shows them as not listed. */
+	tokens?: Record<string, Token[]>;
 	/** Show test networks instead of the real ones: their coins have no value, and the two are
 	 * never shown together. */
 	testnet?: boolean;
@@ -20,6 +23,9 @@ export interface Settings {
 	fx?: string;
 	/** The language chosen in the header; absent, the browser's. */
 	lang?: Lang;
+	/** `false`: bunker mode off — a plain cold wallet. A send moves only what is entered, Home
+	 * does not ask to move anything, and receiving stays on one account. On when absent. */
+	bunker?: boolean;
 }
 
 const KEY = 'airkeys.v1';
@@ -61,6 +67,31 @@ function storedChain(c: unknown): Chain | null {
 	};
 }
 
+/** A token symbol the phone accepts: 1 to 16 printable ASCII characters (wallet/src/review.rs). */
+export const symbolOk = (s: string) => /^[!-~]{1,16}$/.test(s);
+
+/** Stored tokens, each checked again: storage is anyone's to edit. */
+function storedTokens(v: Record<string, unknown>): Record<string, Token[]> {
+	return Object.fromEntries(
+		Object.entries(v)
+			.filter(([key, list]) => /^evm:\d+$/.test(key) && Array.isArray(list))
+			.map(([key, list]) => [
+				key,
+				(list as unknown[]).filter(
+					(t): t is Token =>
+						isObject(t) &&
+						typeof t.address === 'string' &&
+						/^0x[0-9a-fA-F]{40}$/.test(t.address) &&
+						typeof t.symbol === 'string' &&
+						symbolOk(t.symbol) &&
+						Number.isInteger(t.decimals) &&
+						(t.decimals as number) >= 0 &&
+						(t.decimals as number) <= 36
+				)
+			])
+	);
+}
+
 function load(): { accounts: Account[]; settings: Settings } {
 	const empty = { accounts: [], settings: { rpc: {}, chains: [] } };
 	try {
@@ -91,7 +122,9 @@ function load(): { accounts: Account[]; settings: Settings } {
 					? { currency: s.currency }
 					: {}),
 				...(typeof s.fx === 'string' && isHttpUrl(s.fx) ? { fx: s.fx } : {}),
-				...(isLang(s.lang) ? { lang: s.lang } : {})
+				...(isLang(s.lang) ? { lang: s.lang } : {}),
+				...(s.bunker === false ? { bunker: false } : {}),
+				...(isObject(s.tokens) ? { tokens: storedTokens(s.tokens) } : {})
 			}
 		};
 	} catch {
@@ -106,6 +139,28 @@ export const store = $state(
 );
 // the language chosen before, over the browser's
 if (store.settings.lang) lang.current = store.settings.lang;
+
+/** Accounts the phone shows at once: a page, #0–#99, #100–#199 and so on (core/app/src/app.rs). */
+export const PAGE = 100;
+
+/** The page of accounts to connect next on a network: the one after the highest connected. */
+export function nextPage(network: Network): { start: number; end: number } {
+	const top = Math.max(
+		-1,
+		...store.accounts.filter((a) => a.network === network).map((a) => a.index)
+	);
+	const start = (Math.floor(top / PAGE) + 1) * PAGE;
+	return { start, end: start + PAGE - 1 };
+}
+
+/** Bunker mode: funds kept behind keys no one has seen (on unless turned off in Settings). */
+export const bunkerOn = () => store.settings.bunker !== false;
+
+export function setBunker(on: boolean) {
+	if (on) delete store.settings.bunker;
+	else store.settings.bunker = false;
+	save();
+}
 
 /** Shows the app in a language, now and on the next visit. */
 export function setLang(l: Lang) {
@@ -126,10 +181,43 @@ export function chainKey(network: Network, chain?: Chain): string {
 	return network === 'evm' ? `evm:${chain?.chainId}` : network;
 }
 
+/** The tokens added by hand to a chain. */
+export const addedTokens = (c: Chain): Token[] => store.settings.tokens?.[chainKey('evm', c)] ?? [];
+
+/** Adds a token to a chain, by hand; `false` when the chain has it already. */
+export function addToken(c: Chain, token: Token): boolean {
+	const same = (x: Token) => x.address.toLowerCase() === token.address.toLowerCase();
+	if (c.tokens.some(same) || addedTokens(c).some(same)) return false;
+	store.settings.tokens = {
+		...store.settings.tokens,
+		[chainKey('evm', c)]: [...addedTokens(c), token]
+	};
+	save();
+	return true;
+}
+
+export function removeToken(c: Chain, address: string) {
+	const key = chainKey('evm', c);
+	store.settings.tokens = {
+		...store.settings.tokens,
+		[key]: addedTokens(c).filter((x) => x.address.toLowerCase() !== address.toLowerCase())
+	};
+	if (!store.settings.tokens[key].length) delete store.settings.tokens[key];
+	save();
+}
+
 function withSettings(network: Network, c: Chain): Chain {
 	const key = chainKey(network, c);
+	const own = network === 'evm' ? addedTokens(c) : [];
 	return {
 		...c,
+		// the tokens listed, then those added by hand
+		tokens: [
+			...c.tokens,
+			...own.filter(
+				(x) => !c.tokens.some((y) => y.address.toLowerCase() === x.address.toLowerCase())
+			)
+		],
 		rpc: store.settings.rpc[key] || c.rpc,
 		// an endpoint chosen in Settings is the only one used
 		fallback: store.settings.rpc[key] ? undefined : c.fallback

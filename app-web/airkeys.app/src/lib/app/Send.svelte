@@ -10,7 +10,7 @@
 	} from '#lib/chains/index.ts';
 	import { encode, isIndex, parseMessage, type Account, type Signed } from '#lib/protocol.ts';
 	import { explorerLink, NETWORK_NAMES } from '#lib/registry.ts';
-	import { addAccounts, store } from '#lib/state.svelte.ts';
+	import { addAccounts, bunkerOn, nextPage, store } from '#lib/state.svelte.ts';
 	import { ensure, freshIndex, holdingOf, refresh } from '#lib/holdings.svelte.ts';
 	import { parseAddress } from '#lib/addresses.ts';
 	import { formatShort, formatUnits, parseUnits } from '#lib/units.ts';
@@ -37,8 +37,9 @@
 	let speed = $state<0 | 1 | 2>(1);
 	const exposure = $derived(holdingOf(account)?.exposure);
 	// Bitcoin change always goes to a fresh account; on EVM chains moving the rest is the
-	// default: the first send reveals the key
-	let moveRest = $state(true);
+	// default in bunker mode (the first send reveals the key), leaving it in a plain cold wallet
+	const bunker = bunkerOn();
+	let moveRest = $state(bunker);
 	// the lowest connected account seen unused — recomputed as balances arrive, until the person
 	// types another number
 	let typed = $state<number | null>(null);
@@ -95,10 +96,13 @@
 			const recipient = parseAddress(account.network, to);
 			const amount = max ? null : parseUnits(amountText, asset.decimals);
 			if (!max && (amount === null || amount <= 0n)) throw new Error(t.send.enterAmount);
-			if ((moveRest || account.network === 'bitcoin') && fresh === null)
-				throw new Error(t.send.noFreshRest);
-			if ((moveRest || account.network === 'bitcoin') && !isIndex(fresh))
-				throw new Error(t.send.badIndex);
+			// Bitcoin change goes to a fresh account in bunker mode, back to this one otherwise
+			const needsFresh = account.network === 'bitcoin' ? bunker : moveRest;
+			if (needsFresh && fresh === null) {
+				const p = nextPage(account.network);
+				throw new Error(t.send.noFreshRest(p.start, p.end));
+			}
+			if (needsFresh && !isIndex(fresh)) throw new Error(t.send.badIndex);
 			if (moveRest && fresh === account.index) throw new Error(t.send.restElsewhere);
 			busy = true;
 			prepared = await prepare(account.network, {
@@ -106,7 +110,8 @@
 				asset,
 				to: recipient,
 				amount,
-				moveRest: moveRest ? fresh : null,
+				moveRest:
+					!needsFresh && account.network === 'bitcoin' ? account.index : needsFresh ? fresh : null,
 				holdings,
 				speed
 			});
@@ -120,7 +125,10 @@
 
 	async function reviewMove() {
 		try {
-			if (fresh === null) throw new Error(t.send.noFreshMove);
+			if (fresh === null) {
+				const p = nextPage(account.network);
+				throw new Error(t.send.noFreshMove(p.start, p.end));
+			}
 			if (!isIndex(fresh)) throw new Error(t.send.badIndex);
 			if (fresh === account.index) throw new Error(t.send.moveElsewhere);
 			busy = true;
@@ -274,6 +282,11 @@
 			</div>
 			{#if move}
 				<!-- nothing to choose: everything moves -->
+			{:else if account.network === 'bitcoin' && !bunker}
+				<div class="stack tight">
+					<span class="label">{t.send.change}</span>
+					<p class="small">{t.send.changeBack}</p>
+				</div>
 			{:else if account.network === 'bitcoin'}
 				<div class="stack tight">
 					<span class="label">{t.send.change}</span>
@@ -306,7 +319,7 @@
 									aria-label={t.send.freshLabel}
 								/></b
 							>
-							<span class="pill safe">{t.send.recommended}</span>
+							{#if bunker}<span class="pill safe">{t.send.recommended}</span>{/if}
 							<span class="small">{t.send.moveRestNote(asset.chain.name)}</span>
 						</span>
 					</label>
@@ -319,10 +332,10 @@
 					</label>
 				</fieldset>
 			{/if}
-			{#if others.length}<div class="notice warn small">
+			{#if bunker && others.length}<div class="notice warn small">
 					{t.send.elsewhereBefore(atStake)}<b>{t.send.toMove}</b>{t.send.elsewhereAfter}
 				</div>{/if}
-			{#if exposure === 'exposed' && !move}<div class="notice warn small">
+			{#if bunker && exposure === 'exposed' && !move}<div class="notice warn small">
 					{t.send.alreadyExposed}
 				</div>{/if}
 			{#if problem}<div class="notice danger" role="alert">{problem}</div>{/if}
@@ -337,8 +350,14 @@
 				{#each prepared.summary as line, i (i)}<li class="mono">{line}</li>{/each}
 			</ol>
 			<div class="row">
-				<span class="dim grow">{t.send.feeAtMost}</span><b>{prepared.fee}</b>
+				<span class="dim fee-label">{t.send.feeAtMost}</span><b class="fee">{prepared.fee}</b>
 			</div>
+			{#if prepared.restFee}<div class="row small">
+					<span class="dim fee-label">{t.send.restFee}</span><span class="fee"
+						>{prepared.restFee}</span
+					>
+				</div>{/if}
+			{#if prepared.left}<div class="notice info small">{prepared.left}</div>{/if}
 			<div class="row">
 				<button onclick={() => (step = 'form')}>{t.send.edit}</button>
 				<button class="primary grow" onclick={() => (step = 'request')}>{t.send.show}</button>
@@ -451,5 +470,14 @@
 	}
 	.hash {
 		word-break: break-all;
+	}
+	/* the label on one line; a long exact fee wraps instead */
+	.fee-label {
+		white-space: nowrap;
+	}
+	.fee {
+		margin-left: auto;
+		text-align: right;
+		overflow-wrap: anywhere;
 	}
 </style>

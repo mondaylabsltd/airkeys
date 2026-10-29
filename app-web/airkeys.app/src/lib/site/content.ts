@@ -190,7 +190,7 @@ export const en: Content = {
 			},
 			{
 				title: 'Optional',
-				text: 'You can also pay part of an account and keep the change where it is.'
+				text: 'A send can leave the rest where it is, and bunker mode can be turned off to use Airkeys as a plain cold wallet: Bitcoin change then comes back to the same account, and you receive at one address.'
 			}
 		],
 		alt: 'The web companion’s total, split into Bunker and Exposed'
@@ -359,12 +359,16 @@ export const en: Content = {
 				a: 'Follow the recovery guide: Bitcoin Core and Foundry find every account from your phrase and the two documented paths.'
 			},
 			{
+				q: 'Do I have to move my funds after every transfer?',
+				a: 'No. Bunker mode, on by default, moves what is left on a network to an account whose key is still hidden, and shows the extra fee before you sign. Turn it off in the web companion’s Settings to use Airkeys as a plain cold wallet: a send then moves only what you enter.'
+			},
+			{
 				q: 'Is a quantum computer a real threat?',
 				a: 'Not today. For funds held for years, sharing only addresses costs nothing, and bunker mode keeps unspent funds behind keys no one has seen.'
 			},
 			{
 				q: 'Which networks and tokens?',
-				a: 'Bitcoin, and ETH and ERC-20 tokens on Ethereum, Base, Arbitrum, OP, Polygon, BNB Smart Chain, Avalanche and any EVM chain you add. Tokens Airkeys does not list are signed with a warning.'
+				a: 'Bitcoin, and coins and ERC-20 tokens on Ethereum, Base, Arbitrum, OP, Polygon, BNB Smart Chain, Avalanche, Monad and 15 more EVM networks, their testnets, and any EVM chain you add. Tokens Airkeys does not list are signed with a warning.'
 			},
 			{
 				q: 'How do I know my copy is genuine?',
@@ -479,7 +483,7 @@ export const zh: Content = {
 			},
 			{
 				title: '可选',
-				text: '你也可以只付一部分，把余额留在原账户。'
+				text: '转出时可以把剩余资产留在原账户；也可以关掉地堡模式，把 Airkeys 当普通冷钱包用：Bitcoin 的找零会退回同一个账户，收款也一直用同一个地址。'
 			}
 		],
 		alt: '网页助手的总资产，分为地堡与已暴露'
@@ -638,12 +642,16 @@ export const zh: Content = {
 				a: '按恢复指南操作：Bitcoin Core 和 Foundry 可以根据助记词和两条公开路径找回每个账户。'
 			},
 			{
+				q: '每次转账后都要转移资产吗？',
+				a: '不用。地堡模式默认开启，会把这条链上剩下的资产转到公钥未暴露的账户，签名前会显示多出的手续费。在网页助手的设置里关掉它，Airkeys 就是一个普通冷钱包：转出时只转你填写的金额。'
+			},
+			{
 				q: '量子计算机真的是威胁吗？',
 				a: '现在还不是。对长期持有的资产来说，只分享地址没有代价，地堡模式让没花掉的资产始终在无人见过的公钥后面。'
 			},
 			{
 				q: '支持哪些网络和代币？',
-				a: '比特币；以及以太坊、Base、Arbitrum、OP、Polygon、BNB 智能链、Avalanche 和你添加的 EVM 链上的 ETH 与 ERC-20 代币。Airkeys 未收录的代币也能签，但会提示。'
+				a: '比特币；以及以太坊、Base、Arbitrum、OP、Polygon、BNB 智能链、Avalanche、Monad 等 23 个 EVM 网络和它们的测试网，还有你添加的任何 EVM 链上的原生币与 ERC-20 代币。Airkeys 未收录的代币也能签，但会提示。'
 			},
 			{
 				q: '怎么确认装的是正版？',

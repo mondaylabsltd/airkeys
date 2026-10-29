@@ -2,7 +2,8 @@
 // transfer requests (§5.1), broadcasting.
 //
 // A spend reveals the public key of the account it spends from, so a request spends every coin
-// of the account: what is not paid goes to a fresh account as change, never back.
+// of the account: what is not paid goes as change to a fresh account (bunker mode), or back to
+// the same account (a plain cold wallet, `moveRest` its own number).
 import { BTC_DUST, BTC_OUTPUT_BYTES, parseBitcoin, paysSameKey } from '../addresses';
 import { encode, MAX_MESSAGE, signRequest } from '../protocol';
 import { formatUnits } from '../units';
@@ -191,7 +192,11 @@ export async function prepare(i: SendIntent): Promise<Prepared> {
 	];
 	if (rest > 0n) {
 		outputs.push({ to: own(i.moveRest!), amount: rest.toString() });
-		summary.push(t.chains.moveChange(coins(rest), i.moveRest!));
+		summary.push(
+			i.moveRest === i.from.index
+				? t.chains.changeBack(coins(rest))
+				: t.chains.moveChange(coins(rest), i.moveRest!)
+		);
 	}
 	summary.push(t.chains.spendAll(inputs.length, coins(total)));
 	const request = signRequest('bitcoin', i.from, { inputs, outputs });

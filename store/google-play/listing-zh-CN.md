@@ -14,7 +14,7 @@ Airkeys：离线冷钱包
 装在离线手机上的冷钱包：只给地址，签名前逐项显示收款方、金额和手续费。
 ```
 
-## Full description (1059/4000)
+## Full description (1085/4000)
 
 ```
 Airkeys 把一部闲置手机变成冷钱包。手机始终离线；任何电脑的浏览器里打开网页助手（airkeys.app），查询余额、准备转账并广播。两边用摄像头读取对方屏幕上的动态码交换数据，不连线、不联网，也不用蓝牙。
@@ -29,7 +29,7 @@ Airkeys 把一部闲置手机变成冷钱包。手机始终离线；任何电脑
 多数钱包会把公钥交给联网的电脑。Airkeys 只给地址，并让每个账户使用独立的硬化路径，账户转出之前，它的公钥无人知晓。地堡模式在同一次签名里把转账后剩下的资产移到一个新账户。能破解椭圆曲线的量子计算机可以从公钥推出私钥；用 Airkeys，未花费的资产留在没人见过公钥的账户里。
 
 网络
-Bitcoin（原生隔离见证），以及 Ethereum、Base、Arbitrum、OP、Polygon、BNB Smart Chain、Avalanche 和你添加的任何 EVM 链上的 ETH 与 ERC-20 代币。未列入的代币也能签名，但会先显示警告。
+Bitcoin（原生隔离见证），以及 Ethereum、Base、Arbitrum、OP、Polygon、BNB Smart Chain、Avalanche、Monad 等 23 个 EVM 网络和它们的测试网，还有你添加的任何 EVM 链上的原生币与 ERC-20 代币。未列入的代币也能签名，但会先显示警告。
 
 保护
 - 只在离线时工作：只要有网络连接、移动数据或蓝牙开着，Airkeys 只显示离线提示。App 没有联网权限。

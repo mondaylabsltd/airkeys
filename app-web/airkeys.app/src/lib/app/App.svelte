@@ -9,13 +9,16 @@
 	import Mark from '#lib/ui/Mark.svelte';
 	import { save, setLang, store } from '#lib/state.svelte.ts';
 	import { htmlLang, lang, t } from '#lib/i18n/index.svelte.ts';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 
-	/** Mainnet or testnet: never both on screen. Switching starts again from the accounts. */
+	/** Mainnet or testnet: never both on screen. Either button leads to that network's Home. */
 	function mode(testnet: boolean) {
-		if (!!store.settings.testnet === testnet) return;
-		store.settings.testnet = testnet;
-		save();
-		go({ name: 'wallet' });
+		if (!!store.settings.testnet !== testnet) {
+			store.settings.testnet = testnet;
+			save();
+		}
+		if (view.name !== 'wallet') go({ name: 'wallet' });
 	}
 
 	type View =
@@ -24,9 +27,26 @@
 		| { name: 'settings' }
 		| { name: 'account'; account: Account }
 		| { name: 'send'; account: Account; asset: Asset; move?: boolean };
-	let view = $state<View>({ name: 'wallet' });
+	// Every view is an entry in the browser's history, so Back and Forward move between them.
+	// The entry holds the view's place in `trail`; after a reload the trail is gone, and the
+	// app starts again from Home.
+	let trail = $state.raw<View[]>([{ name: 'wallet' }]);
+	const at = $derived(page.state.view ?? 0);
+	const view = $derived(trail[at] ?? trail[0]);
 	let toast = $state('');
-	const go = (v: View) => ((view = v), scrollTo(0, 0));
+	/** Opens a view, as a new history entry, or in place of this one (`replace`). */
+	function go(v: View, replace = false) {
+		const next = replace ? at : at + 1;
+		trail = [...trail.slice(0, next), v];
+		// the same URL, a new history entry: the view starts at the top, focus at its start
+		goto(page.url.href, { state: { view: next }, shallow: true, replace, reset: true });
+	}
+	/** Back to the view before when it is `v`'s kind, otherwise on to `v` in place of this one. */
+	function back(v: View) {
+		const before = at > 0 ? trail[at - 1] : undefined;
+		if (before && before.name === v.name) history.back();
+		else go(v, true);
+	}
 	/** Where the logo leads: the site, or nowhere inside the extension. */
 	let { home = '../' }: { home?: string } = $props();
 
@@ -101,7 +121,8 @@
 		/>
 	{:else if view.name === 'connect'}
 		<Connect
-			done={(m) => ((toast = m), go({ name: 'wallet' }), setTimeout(() => (toast = ''), 4000))}
+			back={() => back({ name: 'wallet' })}
+			done={(m) => ((toast = m), back({ name: 'wallet' }), setTimeout(() => (toast = ''), 4000))}
 		/>
 	{:else if view.name === 'settings'}
 		<Settings />
@@ -109,8 +130,9 @@
 		{@const account = view.account}
 		<AccountPage
 			{account}
-			back={() => go({ name: 'wallet' })}
+			back={() => back({ name: 'wallet' })}
 			send={(asset) => go({ name: 'send', account, asset })}
+			tokens={() => go({ name: 'settings' })}
 			move={(asset) => go({ name: 'send', account, asset, move: true })}
 		/>
 	{:else if view.name === 'send'}
@@ -120,7 +142,7 @@
 			{account}
 			asset={view.asset}
 			move={moving}
-			back={() => go(moving ? { name: 'wallet' } : { name: 'account', account })}
+			back={() => back(moving ? { name: 'wallet' } : { name: 'account', account })}
 		/>
 	{/if}
 </main>

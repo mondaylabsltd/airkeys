@@ -26,6 +26,7 @@
 	const PAD = 12;
 	const MAX_WIDTH = 820;
 	const BUTTONS = 76; // the row of buttons under the code, with its gap
+	const MIN_SIDE = 300; // smaller, a camera across a desk reads it poorly
 	let canvas: HTMLCanvasElement;
 	let box: HTMLDivElement;
 	let timer: ReturnType<typeof setInterval> | undefined;
@@ -71,13 +72,15 @@
 		clearInterval(timer);
 		narrow = window.innerWidth <= NARROW;
 		// the area, in CSS pixels: on a phone the screen's width, and its height below the
-		// page's sticky header with room for the buttons; on a computer a square, most of the
-		// window
+		// page's sticky header with room for the buttons; on a computer a square that fits the
+		// window under the header, with the buttons in view too
 		const screen = document.documentElement.clientWidth;
 		const width = narrow ? screen : Math.min(screen - 32, MAX_WIDTH) - 2 * PAD;
 		const [w, h] = narrow
 			? [width, Math.max(width, window.innerHeight - covered() - BUTTONS)]
-			: Array(2).fill(Math.min(width, window.innerHeight * 0.8));
+			: Array(2).fill(
+					Math.max(MIN_SIDE, Math.min(width, window.innerHeight - covered() - BUTTONS - 2 * PAD))
+				);
 		tall = narrow ? h : 0;
 		const prepared = await preparePayload(bytes, file);
 		const [X, Y] = await grid(prepared, w, h);
@@ -106,10 +109,14 @@
 		};
 		draw();
 		timer = setInterval(draw, 1000 / fps);
-		// on a phone the code is the screen: all of it in view under the header, the buttons
-		// just below
-		if (narrow)
-			window.scrollTo({ top: box.getBoundingClientRect().top + window.scrollY - covered() });
+		// all of it in view under the header, the buttons just below: on a phone the code is the
+		// screen; on a computer it moves up only when it does not fit where it is
+		const top = box.getBoundingClientRect().top;
+		if (narrow || top < covered() || top + h + 2 * PAD + BUTTONS > window.innerHeight)
+			window.scrollTo({
+				top: top + window.scrollY - covered() - (narrow ? 0 : PAD),
+				behavior: narrow ? 'instant' : 'smooth'
+			});
 	}
 
 	/** How much of the window's top the page's sticky bars cover. */

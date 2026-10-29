@@ -1,6 +1,7 @@
 // Everything the web app says, in English: the source the Chinese dictionary follows key by key.
 // Values are text, or functions of plain values (numbers, names) for text that holds them.
-// Labels on the phone's own screens (Connect, Show code, Scan request) are the phone's words.
+// Labels on the phone's own screens (Connect, Show code, Scan request, Accounts #0 to #99) are
+// the phone's words.
 
 /** "1 account", "2 accounts". */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -40,6 +41,7 @@ export const en = {
 		endpoints: 'endpoints',
 		notCountedAfter: ').',
 		noPrice: (symbols: string) => `No price for ${symbols}: not in the total.`,
+		andMore: (names: string, more: number) => `${names} and ${more} more`,
 		couldNotRead: (what: string) => `Could not read ${what}.`,
 		bunker: 'Bunker',
 		exposed: 'Exposed',
@@ -48,14 +50,18 @@ export const en = {
 		nothingExposed: 'Nothing behind a revealed key',
 		receiveBitcoin: 'Receive Bitcoin',
 		receiveEvm: 'Receive on EVM',
-		noHiddenBefore: (networks: string) =>
-			`No ${networks} account with a hidden key is connected here. On the phone: Connect → All 100 accounts, then `,
+		noHiddenBefore: (networks: string, start: number, end: number) =>
+			`No ${networks} account with a hidden key is connected here. On the phone, turn the wheel to #${start}, then Connect → Accounts #${start} to #${end}, and `,
+		fewFreshBefore: (network: string, n: number, start: number, end: number) =>
+			`Only ${n} unused ${network} ${n === 1 ? 'account is' : 'accounts are'} connected here for bunker mode to move funds to. Before they run out: on the phone, turn the wheel to #${start}, then Connect → Accounts #${start} to #${end}, and `,
 		scanIt: 'scan it',
 		noHiddenAfter: '.',
 		toMove: 'To move',
 		toMoveLead:
 			'These accounts have sent before, so their public keys are on chain. Move what each holds to an account whose key is still hidden, one signing per chain.',
 		move: 'Move',
+		smallMoves: (n: number, under: string) =>
+			`${n} more, each worth under ${under}: a move may cost more in fees`,
 		assets: 'Assets',
 		showAssetsOf: 'Show the assets of',
 		all: 'All',
@@ -112,6 +118,7 @@ export const en = {
 			`This account holds nothing on ${chains}. Receive at the address above; each coin or token then appears here with a `,
 		holdsNothingAfter: ' button.',
 		nothingOn: (chains: string) => `Nothing on ${chains}.`,
+		coin: 'The chain’s own coin',
 		unreachable: (what: string) => `Not reachable: ${what}. Change the endpoint in Settings.`,
 		remove: 'Remove this account from this browser'
 	},
@@ -126,8 +133,11 @@ export const en = {
 	},
 	connect: {
 		notAccounts: 'This is a signed reply, not accounts. On the phone, tap Connect.',
-		replace: (network: string, index: number, n: number) =>
-			`These accounts are from another wallet (or passphrase): ${network} account #${index} has a different address here.\n\nReplace the ${plural(n, 'account')} in this browser with these? Funds are not affected.`,
+		otherWallet: 'Accounts of another wallet',
+		otherWalletText: (network: string, index: number) =>
+			`${network} account #${index} has a different address here: these accounts come from another wallet, or the same phrase with another passphrase. The two are never mixed. Funds are not affected either way.`,
+		replace: (n: number) => `Replace the ${plural(n, 'account')} here`,
+		keep: 'Keep the accounts here',
 		kept: 'Nothing added. This browser keeps its accounts.',
 		replaced: (n: number) =>
 			`Replaced the accounts here with this wallet's ${plural(n, 'account')}.`,
@@ -146,10 +156,10 @@ export const en = {
 		chainWith: (chain: string, what: string) => `${chain} (${what})`,
 		moreChains: (n: number) => ` and ${n} more ${n === 1 ? 'chain' : 'chains'}`,
 		enterAmount: 'Enter an amount.',
-		noFreshRest:
-			'Airkeys has not seen an unused account to move the rest to. On the phone, Connect → All 100 accounts, then scan it here.',
-		noFreshMove:
-			'Airkeys has not seen an unused account to move to. On the phone, Connect → All 100 accounts, then scan it here.',
+		noFreshRest: (start: number, end: number) =>
+			`Airkeys has not seen an unused account to move the rest to. On the phone, turn the wheel to #${start}, then Connect → Accounts #${start} to #${end}, and scan it here.`,
+		noFreshMove: (start: number, end: number) =>
+			`Airkeys has not seen an unused account to move to. On the phone, turn the wheel to #${start}, then Connect → Accounts #${start} to #${end}, and scan it here.`,
 		badIndex: 'An account number is a whole number from 0 to 2147483647.',
 		restElsewhere: 'Move the rest to another account number.',
 		moveElsewhere: 'Move to another account number.',
@@ -180,6 +190,8 @@ export const en = {
 			'Bitcoin spends whole coins, so every coin of this account is spent. The change goes to account #',
 		changeAfter: ', whose key is still hidden.',
 		changeLabel: 'Account for the change',
+		changeBack:
+			'Bitcoin spends whole coins: what you do not send comes back to this account as change.',
 		rest: 'The rest of this account',
 		moveRest: 'Move it to account #',
 		freshLabel: 'Fresh account number',
@@ -199,6 +211,7 @@ export const en = {
 		review: 'Review',
 		phoneWillSign: 'The phone will sign',
 		feeAtMost: 'Network fee, at most',
+		restFee: 'Of which, moving the rest',
 		edit: 'Edit',
 		show: 'Show to the phone',
 		requestBefore: 'On the phone: ',
@@ -273,7 +286,9 @@ export const en = {
 			'The web app keeps only addresses and these settings, in this browser. It never sees a key.',
 		forgetConfirm:
 			'Forget every account in this browser? The funds are untouched; connect the phone again to see them.',
-		forget: 'Forget all accounts'
+		forget: 'Forget all accounts',
+		keepAccounts: 'Keep them',
+		forgotten: 'Forgotten. Connect the phone again to see them.'
 	},
 	scan: {
 		notAllowed:
@@ -333,7 +348,40 @@ export const en = {
 	net: {
 		noAnswer: (host: string) => `${host} did not answer`,
 		late: (host: string) => `${host} did not answer in time`,
-		noBatch: 'no answer to a batch of calls'
+		noBatch: 'no answer to a batch of calls',
+		badAnswer: 'an answer that does not fit the question'
+	},
+	bunker: {
+		title: 'Bunker mode',
+		label: 'Keep funds behind keys no one has seen',
+		on: 'On: each send also moves what is left on that network to an account whose key is still hidden, in the same signing, and Home lists what to move. Every coin or token moved costs a network fee.',
+		off: 'Off: a send moves only the amount you enter, Bitcoin change comes back to the same account, and you receive at one account, as with any cold wallet. Move all stays on each account page. Airkeys still reads which keys are exposed: turn bunker mode back on to see them.'
+	},
+	tokens: {
+		title: 'Tokens',
+		lead: 'Airkeys reads the tokens it lists on each network. Add any other ERC-20 token here, by name or by contract address.',
+		network: 'Network',
+		search: 'Search by name or symbol, or paste a contract address',
+		loadingIndex: 'Loading the token list…',
+		indexFailed: (why: string) =>
+			`The token list did not load (${why}). Paste the contract address instead.`,
+		reading: 'Reading the contract…',
+		notToken: 'This address does not answer as an ERC-20 token on this network.',
+		badSymbol: (symbol: string) =>
+			`Its symbol, “${symbol}”, is not one the phone can show: 1 to 16 ASCII letters, digits or signs.`,
+		listed: 'Airkeys lists this token already.',
+		already: 'This token is added already.',
+		decimals: (n: number) => `${n} decimals`,
+		check:
+			'Anyone can make a token with any name. Check the address against the project’s own site before you add it.',
+		add: 'Add token',
+		added: (symbol: string) => `Added ${symbol}. Its balances show on Home.`,
+		note: 'Tokens added here are not priced, and the phone shows them as not listed, with their address.',
+		yours: 'Added here',
+		remove: 'Remove',
+		missingBefore: 'A token missing? ',
+		missingLink: 'Add it in Settings',
+		missingAfter: '.'
 	},
 	chainData: {
 		mismatch: 'The chain data does not match this chain id.',
@@ -361,6 +409,7 @@ export const en = {
 			`The account holds ${held}: too little for this amount and its fee at ${rate} sat/vB.`,
 		dust: (sat: number) => `The amount is below the network's dust limit of ${sat} sat.`,
 		changeNeedsAccount: 'The change needs an account to go to.',
+		changeBack: (amount: string) => `Change of ${amount} back to this account`,
 		moveChange: (amount: string, index: number) =>
 			`Move the change, ${amount}, to your account #${index}`,
 		spendAll: (n: number, total: string) =>
@@ -370,6 +419,8 @@ export const en = {
 		holds: (held: string) => `The account holds ${held}.`,
 		feeNotCovered: 'The balance does not cover the network fee.',
 		nothingToMove: 'Nothing to move: the balance does not cover a network fee.',
+		stayBehind: (symbols: string) =>
+			`One request holds at most 16 transactions, so ${symbols} stay at this address. Once this is signed and sent, move them with Move all.`,
 		feesExceed: (fees: string, held: string) =>
 			`The fees need up to ${fees}; the account holds ${held}.`
 	}

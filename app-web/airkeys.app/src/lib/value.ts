@@ -17,14 +17,44 @@ export const FEEDS: { key: string; chainId: number; address: string }[] = [
 	// "MATIC / USD": the coin was renamed POL; the feed kept its name
 	{ key: 'POL', chainId: 1, address: '0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676' },
 	{ key: 'AVAX', chainId: 1, address: '0xFF3EEb22B5E3dE6e705b44749C2559d704923FD7' },
-	{ key: 'BNB', chainId: 56, address: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE' }
+	{ key: 'BNB', chainId: 56, address: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE' },
+	{ key: 'LINK', chainId: 1, address: '0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c' },
+	{ key: 'UNI', chainId: 1, address: '0x553303d460EE0afB37EdFf9bE42922D8FF63220e' },
+	{ key: 'AAVE', chainId: 1, address: '0x547a514d5e3769680Ce22B2361c10Ea13619e8a9' },
+	{ key: 'stETH', chainId: 1, address: '0xCfE54B5cD566aB89272946F602D76Ea879CAb4a8' },
+	{ key: 'CRV', chainId: 1, address: '0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f' },
+	{ key: 'MKR', chainId: 1, address: '0xec1D1B3b0443256cc3860e24a46F108e699484Aa' },
+	{ key: 'COMP', chainId: 1, address: '0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5' },
+	{ key: 'PYUSD', chainId: 1, address: '0x8f1dF6D7F2db73eECE86a18b4381F4707b918FB1' },
+	{ key: 'EURC', chainId: 1, address: '0x04F84020Fdf10d9ee64D1dcC2986EDF2F556DA11' }
 ];
 
 /** A feed answer older than this is not a price: a feed that stopped is not today's value. */
 export const STALE_SECONDS = 24 * 3600;
 
-/** Wrapped coins are worth the coin. */
-const SAME_AS: Record<string, string> = { WETH: 'ETH', WBTC: 'BTC' };
+/** Valued as another: wrapped coins, and bridged stablecoins at par (".e", USDbC, USDT0, xDAI)
+ * — an assumption that holds while the bridge does. Tokens of smaller bridges (axlUSDC, Orbit's
+ * oUSDC) are left unpriced: some have lost their peg. */
+const SAME_AS: Record<string, string> = {
+	WETH: 'ETH',
+	WBTC: 'BTC',
+	WPOL: 'POL',
+	WAVAX: 'AVAX',
+	WBNB: 'BNB',
+	'USDC.e': 'USDC',
+	USDbC: 'USDC',
+	USDT0: 'USDT',
+	'USDT.e': 'USDT',
+	'DAI.e': 'DAI',
+	xDAI: 'DAI',
+	WXDAI: 'DAI',
+	PYUSD0: 'PYUSD',
+	// Avalanche's bridge from Ethereum
+	'LINK.e': 'LINK',
+	'AAVE.e': 'AAVE',
+	'UNI.e': 'UNI',
+	'COMP.e': 'COMP'
+};
 
 /** The feed that values an asset, or `null`. Only what Airkeys lists is priced — a coin of a
  * listed mainnet, a token at a listed address — so a token that merely calls itself "USDC",

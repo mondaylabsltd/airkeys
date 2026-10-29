@@ -14,7 +14,7 @@ Airkeys: Offline Cold Wallet
 A cold wallet for an offline phone. Addresses only; every transfer shown first.
 ```
 
-## Full description (2711/4000)
+## Full description (2762/4000)
 
 ```
 Airkeys turns a spare phone into a cold wallet. The phone stays offline. The web companion at airkeys.app, in a browser on any computer, reads balances, prepares transfers and broadcasts them. The two exchange animated codes through their cameras, so no cable, network or Bluetooth connects them.
@@ -29,7 +29,7 @@ ADDRESSES ONLY
 Most wallets give the online computer public keys. Airkeys gives it addresses, and puts every account on its own hardened path, so an account's public key stays unknown until it spends. Bunker mode moves what is left after a spend to a fresh account in the same signing. A quantum computer that breaks elliptic curves could derive a private key from a public key; with Airkeys, unspent funds stay behind keys nobody has seen.
 
 NETWORKS
-Bitcoin (native SegWit), and ETH and ERC-20 tokens on Ethereum, Base, Arbitrum, OP, Polygon, BNB Smart Chain, Avalanche and any EVM chain you add. Tokens Airkeys does not list are signed with a warning.
+Bitcoin (native SegWit), and coins and ERC-20 tokens on Ethereum, Base, Arbitrum, OP, Polygon, BNB Smart Chain, Avalanche, Monad and 15 more EVM networks, their testnets, and any EVM chain you add. Tokens Airkeys does not list are signed with a warning.
 
 PROTECTIONS
 - Works only offline: while a network connection, mobile data or Bluetooth is on, Airkeys shows only its offline screen. The app has no internet permission.

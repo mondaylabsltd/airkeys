@@ -24,8 +24,12 @@ once broadcast); privacy from the web app's endpoints ([Many accounts](#many-acc
 ### Two networks
 Bitcoin (native SegWit) and EVM chains with ERC-20 tokens: on both, the design relies on an
 address being a hash of a public key. An account has one address on every EVM chain. The
-registry lists Ethereum, Base, Arbitrum One, OP Mainnet, Polygon, BNB Smart Chain,
-Avalanche C-Chain and Sepolia; others can be [added](#adding-a-network).
+registry lists 23 EVM mainnets (Ethereum, Base, Arbitrum One, OP Mainnet, Polygon, BNB Smart
+Chain, Avalanche C-Chain, Monad and others) and 8 testnets, with about 300 tokens: on each
+network its stablecoins and wrapped coin, and the tokens with the largest market caps whose
+address two sources agree on. Other networks can be [added](#adding-a-network), and other
+tokens in Settings, by name or address (read from the contract, never priced, and shown by the
+phone as not listed).
 
 ### Addresses only
 The phone shares `{ network, index, address }` and nothing else
@@ -67,10 +71,23 @@ account:
   here" sends only the amount entered.
 - **Bitcoin**: a transaction spends whole coins, so the web app spends all of the account's
   coins and sends the change to the fresh account. Any amount can be sent.
-- The phone refuses transfers or change back to the paying address.
+- The phone refuses any output to the paying address, in any form of its key (PROTOCOL §6,
+  check 4), with one exception: one Bitcoin output may return change to it, written by index or
+  exactly as §3 spells the address. This is Airkeys' rule, not Bitcoin's: Bitcoin itself lets
+  change return to any address. Bunker mode never uses the exception; a plain cold wallet does.
+- Review shows what moving the rest adds to the fee, apart. Bunker mode can be turned off in
+  Settings, for those who keep Airkeys as a plain cold wallet: a send then leaves the rest in
+  place, receiving stays on the lowest account, and Home shows no Bunker / Exposed split, To
+  move list or exposure marks, and Bitcoin change comes back to the paying account, so the coins
+  stay on one account. Exposure is still read from the chain on every refresh, so turning
+  bunker mode back on shows it at once; no account counts as hidden again for a switch.
 - The fresh account is the lowest connected account, other than the payer, that the web app
   has read and found unused. The phone derives accounts named by number (`{ "index": 1 }`)
   itself, so the web app cannot redirect "your account #1".
+- Every move uses up a fresh account. The phone shares accounts a page at a time (#0 to #99,
+  #100 to #199, up to #9999: the page the home screen's wheel is on), so a code stays one page
+  of 200 addresses. Home asks for the next page when fewer than five unused accounts are
+  connected, and names it.
 - Reserved but unused EVM gas is refunded to the old account and stays there as dust.
 - **Other EVM chains** are reported, not swept. A first send on one reveals the key on all of
   them, but a request covers one chain, and sweeping every chain in one signing would make a
@@ -163,7 +180,7 @@ code is 44, 52 or 60 cells across, the first with which a reader catching every 
 message within four frames (counted by playing the sender's own schedule into a receiver). A
 simulated 720p webcam (blur, sensor noise) read codes 44 and 52 across at 200–260 px wide in its
 image; 72 and 84 across needed 340 px. A signed reply takes 44 across and two to four frames;
-all 100 accounts (8.8 KB compressed), 60 across and about ten frames (a second).
+a page of 100 accounts (8.8 KB compressed), 60 across and about ten frames (a second).
 
 The web app shows a request as large as the window allows: a square of up to 796 px on a
 computer (what a phone held upright frames best), or the whole screen in a phone's browser. A
@@ -178,9 +195,13 @@ Lumen Code and a small QR encoder.
 
 ### Many accounts in the web app
 Public endpoints limit how fast one visitor may ask, so balances are read in bulk:
-- **EVM**: one JSON-RPC batch carries the balances, token balances and nonces of several
-  addresses (50 calls per batch, batches 300 ms apart per chain); 100 accounts take about 13
-  requests per chain. A nonce above zero marks the key exposed on every EVM chain.
+- **EVM**: Multicall3 reads 1,000 coin and token balances per `eth_call`, four calls at a time
+  (halved where an endpoint refuses the size), and one JSON-RPC batch the nonces of 50
+  addresses (fewer where an endpoint asks, batches 300 ms apart); 100 accounts and 60 tokens
+  take about 3 s per chain. A nonce above zero, on any chain the
+  registry lists, testnets included, marks the key exposed on every EVM chain.
+- What is on screen is read again every minute while the page is in view, and when it comes
+  back into view; a background read that misses a chain keeps the last complete figures.
 - **Bitcoin**: Esplora answers one address per request, so accounts are read in order, three
   at a time, stopping after 10 unused in a row (the usual gap limit; bunker mode fills the
   lowest unused account). The rest show "not checked", with a button to check them.
@@ -241,7 +262,7 @@ the gas estimate) so the last transfer of a bunker sweep is not refused for lack
 | A real camera, both ways | A Redmi K40 read a request from a MacBook's screen in about 3 s (15 frames/s, ~11 ms per frame), exactly as sent. In the web app, the MacBook's 1080p FaceTime HD camera read all 100 accounts (200 addresses) from the K40's full-screen code, hand-held under glare, a second after first seeing it. An offline iPhone 15 Pro (iOS 26.5.2) read and signed a request from the MacBook's screen; the MacBook read the reply in 0.3 s, its two transactions byte for byte the K40's for the same request |
 | The air gap on real phones | Redmi K40: MIUI's half-on Bluetooth (the API alone said off) and Wi-Fi scanning detected; every row off with Airplane mode, Bluetooth and Location off. iPhone 11: Wi-Fi, Bluetooth and a network shown as on. Samsung Galaxy S22 (Android 15): Wi-Fi, Bluetooth, mobile data and a network each shown as on; every row off with Airplane mode, Wi-Fi and Bluetooth off |
 | App flows | The real FFI object through import (fixing a word mid-phrase), SeedQR/CompactSeedQR images, passphrases, radios and "still active", the account range, connect (one and all 100, read back from the code), review and signing (`core/app/tests/flows.rs`); iOS UI tests fix a word from the grid and sign |
-| Codes on screen are readable | Full-screen code screenshots on the Android emulator and iOS simulator decode to exactly the JSON shown: all 100 accounts (17 KB) from 11 screenshots on each, the signed reply from 2 |
+| Codes on screen are readable | Full-screen code screenshots on the Android emulator and iOS simulator decode to exactly the JSON shown: a page of 100 accounts (17 KB) from 11 screenshots on each, the signed reply from 2 |
 | Code sizes | A simulated 720p webcam (blur, sensor noise) and the real scanner, codes 200–420 px wide in its image: which grids read, in how many frames (`core/app/examples/capacity.rs` counts frames for real messages); `core/app/tests/flows.rs` checks the code's shape for an area |
 | The account wheel | Android emulator: a slow drag and a fling settle on the number in the band, the addresses follow, the vibration log shows one tick per number; an iOS simulator UI test turns the wheel to 7 and back |
 | The web app's Bitcoin client | Against Bitcoin Core regtest behind an Esplora shim: balances, exposure, fee as shown, change to a fresh account, send-all, four refusals, and the phone refusing a forged input (`scripts/chains/bitcoin.ts`) |

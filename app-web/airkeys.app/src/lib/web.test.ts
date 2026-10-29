@@ -12,6 +12,8 @@ import { registry } from './registry';
 import { formatShort, formatUnits, parseUnits } from './units';
 import { parseMessage, encode } from './protocol';
 import { elsewhere, priceKey, readRound, summarize, STALE_SECONDS, type Holder } from './value';
+import { abiText, readToken, searchTokens } from './chainData';
+import { addToken, chainsOf, nextPage, removeToken, store, symbolOk } from './state.svelte';
 
 describe('addresses agree with the core', () => {
 	it('Bitcoin', () => {
@@ -258,7 +260,7 @@ describe('transfer requests', () => {
 		evmNode();
 		const balance = 10n ** 18n;
 		const holdings = [coin(balance), token(USDC, 1000_000000n), token(DAI, 5n * 10n ** 18n)];
-		const { request, summary } = await evm.prepare(
+		const { request, summary, restFee } = await evm.prepare(
 			intent({
 				from: EVM_FROM,
 				asset: holdings[1],
@@ -281,6 +283,20 @@ describe('transfer requests', () => {
 		// every wei is either paid as a fee at most, or moved
 		const fees = txs.reduce((s, t) => s + BigInt(t.gas) * MAX_FEE, 0n);
 		expect(BigInt(txs[3].amount) + fees).toBe(balance);
+		// what the three moves add to the fee, shown apart
+		expect(restFee).toBe(`≤ ${formatUnits(BigInt(72000 + 72000 + 21000) * MAX_FEE, 18)} ETH`);
+		// left in place, there is nothing to add
+		const leave = await evm.prepare(
+			intent({
+				from: EVM_FROM,
+				asset: holdings[1],
+				to: STRANGER_EVM,
+				amount: 100_000000n,
+				holdings
+			})
+		);
+		expect(leave.request.txs).toHaveLength(1);
+		expect(leave.restFee).toBeUndefined();
 	});
 
 	it('EVM: sending all of the coin keeps the fees of the moves after it', async () => {
@@ -342,6 +358,24 @@ describe('transfer requests', () => {
 		expect(dust.fee).toMatch(/^0\.000023 BTC/);
 	});
 
+	it('Bitcoin, as a plain cold wallet: the change comes back to the paying account', async () => {
+		esploraNode([60_000, 40_000]);
+		const back = await bitcoin.prepare(
+			intent({
+				from: BTC_FROM,
+				asset: sats(100_000n),
+				to: STRANGER_BTC,
+				amount: 50_000n,
+				moveRest: BTC_FROM.index
+			})
+		);
+		expect(back.request.outputs).toEqual([
+			{ to: { address: STRANGER_BTC }, amount: '50000' },
+			{ to: { index: BTC_FROM.index }, amount: String(100_000 - 50_000 - 2090) }
+		]);
+		expect(back.summary[1]).toMatch(/back to this account$/);
+	});
+
 	it('Bitcoin: refuses an amount under the dust limit, and more coins than one request spends', async () => {
 		esploraNode([100_000]);
 		await expect(
@@ -380,6 +414,35 @@ describe('moving everything', () => {
 		expect(summary[0]).toBe('Move 1,000 USDC to your account #3');
 		const fees = txs.reduce((s, t) => s + BigInt(t.gas) * MAX_FEE, 0n);
 		expect(BigInt(txs[1].amount) + fees).toBe(balance);
+	});
+
+	it('EVM: one request holds at most 16 transactions; the tokens past them stay for the next', async () => {
+		evmNode();
+		const many = Array.from({ length: 20 }, (_, k) =>
+			token(
+				{ ...USDC, address: '0x' + (k + 1).toString(16).padStart(40, '0'), symbol: `T${k}` },
+				1n
+			)
+		);
+		const holdings = [coin(10n ** 18n), ...many];
+		const all = await evm.prepare(
+			intent({ from: EVM_FROM, asset: holdings[0], to: '', moveRest: 3, moveAll: true, holdings })
+		);
+		expect(all.request.txs).toHaveLength(evm.MAX_TXS);
+		expect(all.left).toMatch(/T15, T16, T17, T18, T19 stay/);
+		// a token sent, its rest and the others moving after it, the coin last
+		const sent = { ...many[0], amount: 2n };
+		const send = await evm.prepare(
+			intent({
+				from: EVM_FROM,
+				asset: sent,
+				amount: 1n,
+				to: STRANGER_EVM,
+				moveRest: 3,
+				holdings: [holdings[0], sent, ...many.slice(1)]
+			})
+		);
+		expect(send.request.txs).toHaveLength(evm.MAX_TXS);
 	});
 
 	it('EVM: refuses when the coin cannot pay a fee, or there is no account to go to', async () => {
@@ -436,6 +499,24 @@ describe('values', () => {
 		expect(priceKey(on(eth, { ...USDC, address: STRANGER_EVM }))).toBeNull();
 		expect(priceKey(on(sepolia))).toBeNull();
 		expect(priceKey(on({ ...eth, chainId: 59144, name: 'Linea' }))).toBeNull();
+	});
+
+	it('value bridged and wrapped coins as the coin, but not those of smaller bridges', () => {
+		const chain = (id: number) => registry.evm.find((c) => c.chainId === id)!;
+		const token = (id: number, symbol: string) => {
+			const c = chain(id);
+			return on(
+				c,
+				c.tokens.find((t) => t.symbol === symbol)!
+			);
+		};
+		expect(priceKey(token(42161, 'USDC.e'))).toBe('USDC');
+		expect(priceKey(token(10, 'USDT0'))).toBe('USDT');
+		expect(priceKey(token(137, 'WPOL'))).toBe('POL');
+		expect(priceKey(on(chain(988)))).toBe('USDT');
+		expect(priceKey(on(chain(5042)))).toBe('USDC');
+		expect(priceKey(token(8217, 'oUSDC'))).toBeNull();
+		expect(priceKey(token(43114, 'axlUSDC'))).toBeNull();
 	});
 
 	it('read a feed answer, refusing stale or non-positive prices', () => {
@@ -502,5 +583,154 @@ describe('values', () => {
 			[0, 'Base', 5]
 		]);
 		expect(elsewhere(holders[0].assets, eth).map((e) => e.chain.name)).toEqual(['Base']);
+	});
+});
+
+describe('the registry', () => {
+	it('lists what the phone accepts: unique chains, testnets last, symbols it can show', () => {
+		const ids = registry.evm.map((c) => c.chainId);
+		expect(new Set(ids).size).toBe(ids.length);
+		const firstTest = registry.evm.findIndex((c) => c.testnet);
+		expect(registry.evm.slice(firstTest).every((c) => c.testnet)).toBe(true);
+		// the phone takes a token symbol of 1 to 16 printable ASCII characters (wallet/src/review.rs)
+		const ascii = /^[!-~]{1,16}$/;
+		for (const c of registry.evm) {
+			expect(c.rpc.startsWith('https://'), c.name).toBe(true);
+			expect(c.symbol, c.name).toMatch(ascii);
+			for (const t of c.tokens) expect(t.symbol, `${c.name} ${t.address}`).toMatch(ascii);
+			const addresses = c.tokens.map((t) => t.address.toLowerCase());
+			expect(new Set(addresses).size, c.name).toBe(addresses.length);
+		}
+	});
+});
+
+describe('Multicall3', () => {
+	it('encodes aggregate3 and reads its answer, a failed call as null', () => {
+		const word = (n: number | bigint) => n.toString(16).padStart(64, '0');
+		const call = '0x70a08231' + word(0xabcdn);
+		const data = evm.encodeAggregate3([[evm.MULTICALL, call]]);
+		expect(data).toBe(
+			'0x82ad56cb' +
+				[0x20, 1, 0x20].map(word).join('') +
+				evm.MULTICALL.slice(2).toLowerCase().padStart(64, '0') +
+				[1, 0x60, 36].map(word).join('') +
+				call.slice(2).padEnd(128, '0')
+		);
+		// (true, 5) and (false, "")
+		const answer =
+			'0x' +
+			[0x20, 2, 0x40, 0xc0].map(word).join('') +
+			[1, 0x40, 32, 5].map(word).join('') +
+			[0, 0x40, 0].map(word).join('');
+		expect(evm.decodeAggregate3(answer, 2)).toEqual(['0x' + word(5), null]);
+		expect(() => evm.decodeAggregate3(answer, 3)).toThrow();
+	});
+});
+
+describe('tokens added by hand', () => {
+	afterEach(() => vi.unstubAllGlobals());
+	const word = (n: number | bigint) => n.toString(16).padStart(64, '0');
+	const text = (s: string) => {
+		const hexed = [...new TextEncoder().encode(s)].map((b) => b.toString(16).padStart(2, '0'));
+		return '0x' + word(32) + word(hexed.length) + hexed.join('').padEnd(64, '0');
+	};
+	/** An endpoint that answers symbol() and decimals() with these. */
+	const tokenNode = (symbol: string | null, decimals: string | null) =>
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (_url: string, init: RequestInit) => {
+				const calls = JSON.parse(init.body as string) as {
+					id: number;
+					params: [{ data: string }];
+				}[];
+				return new Response(
+					JSON.stringify(
+						calls.map((c) => ({
+							jsonrpc: '2.0',
+							id: c.id,
+							result: c.params[0].data === '0x95d89b41' ? symbol : decimals
+						}))
+					)
+				);
+			})
+		);
+
+	it('read a symbol as an ABI string, or as the bytes32 of older tokens', () => {
+		expect(abiText(text('UNI'))).toBe('UNI');
+		expect(abiText('0x' + '4d4b520000000000000000000000000000000000000000000000000000000000')).toBe(
+			'MKR'
+		);
+		expect(abiText('0x')).toBeNull();
+		expect(abiText(null)).toBeNull();
+	});
+
+	it('take symbol and decimals from the contract, refusing what the phone cannot show', async () => {
+		const at = '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984';
+		tokenNode(text('UNI'), '0x' + word(18));
+		expect(await readToken(eth, at.toLowerCase())).toEqual({
+			address: at,
+			symbol: 'UNI',
+			decimals: 18
+		});
+		tokenNode(text('USD₮0'), '0x' + word(6));
+		await expect(readToken(eth, at)).rejects.toThrow(/phone can show/);
+		tokenNode('0x', null);
+		await expect(readToken(eth, at)).rejects.toThrow(/not .*ERC-20/);
+		expect(symbolOk('USDC.e')).toBe(true);
+		expect(symbolOk('')).toBe(false);
+		expect(symbolOk('A'.repeat(17))).toBe(false);
+	});
+
+	it('find tokens of one chain by symbol first, then by name', () => {
+		const hit = (chainId: number, symbol: string, name: string) => ({
+			chainId,
+			symbol,
+			name,
+			address: '0x' + '1'.repeat(40),
+			hasLogo: true
+		});
+		const list = [
+			hit(1, 'UNIX', 'Unix'),
+			hit(1, 'UNI', 'Uniswap'),
+			hit(56, 'UNI', 'Uniswap'),
+			hit(1, 'X', 'Universe')
+		];
+		expect(searchTokens(list, 1, 'uni').map((x) => x.symbol)).toEqual(['UNI', 'UNIX', 'X']);
+		expect(searchTokens(list, 56, 'uni')).toHaveLength(1);
+	});
+
+	it('join the chain’s tokens, unpriced and after the listed ones', () => {
+		const pepe = {
+			address: '0x1111111111111111111111111111111111111111',
+			symbol: 'MINE',
+			decimals: 18
+		};
+		expect(addToken(eth, pepe)).toBe(true);
+		expect(addToken(eth, { ...pepe, address: pepe.address.toLowerCase() })).toBe(false);
+		const mainnet = chainsOf('evm').find((c) => c.chainId === 1)!;
+		expect(mainnet.tokens.at(-1)).toEqual(pepe);
+		expect(mainnet.tokens.length).toBe(eth.tokens.length + 1);
+		expect(
+			priceKey({ ...coin(1n), chain: mainnet, token: pepe, symbol: 'PEPE', decimals: 18 })
+		).toBeNull();
+		removeToken(eth, pepe.address);
+		expect(chainsOf('evm').find((c) => c.chainId === 1)!.tokens.length).toBe(eth.tokens.length);
+	});
+});
+
+describe('pages of accounts', () => {
+	it('the next page to connect is the one after the highest account connected', () => {
+		const before = store.accounts;
+		store.accounts = [];
+		expect(nextPage('evm')).toEqual({ start: 0, end: 99 });
+		store.accounts = [
+			{ network: 'evm', index: 0, address: '0x1' },
+			{ network: 'evm', index: 99, address: '0x2' }
+		];
+		expect(nextPage('evm')).toEqual({ start: 100, end: 199 });
+		expect(nextPage('bitcoin')).toEqual({ start: 0, end: 99 });
+		store.accounts = [{ network: 'evm', index: 150, address: '0x3' }];
+		expect(nextPage('evm')).toEqual({ start: 200, end: 299 });
+		store.accounts = before;
 	});
 });

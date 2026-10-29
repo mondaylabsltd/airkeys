@@ -2,7 +2,7 @@
 	// Endpoints per chain, and EVM chains added by hand. Everything stays in this browser.
 	// Self-hosters can point every chain at their own nodes.
 	import { registry, type Chain, type Token } from '#lib/registry.ts';
-	import { save, store } from '#lib/state.svelte.ts';
+	import { bunkerOn, save, setBunker, store } from '#lib/state.svelte.ts';
 	import { isHttpUrl, rpc } from '#lib/chains/net.ts';
 	import { DEFAULT_FX, loadCurrencies, prices, refreshPrices } from '#lib/prices.svelte.ts';
 	import {
@@ -14,6 +14,7 @@
 		type ChainOffer
 	} from '#lib/chainData.ts';
 	import { t } from '#lib/i18n/index.svelte.ts';
+	import Tokens from './Tokens.svelte';
 
 	let problem = $state('');
 	let fxProblem = $state('');
@@ -47,6 +48,9 @@
 		void refreshPrices(true);
 	}
 	let added = $state('');
+	/** "Forget all accounts" asks first, on the page; then says it is done. */
+	let forgetting = $state(false);
+	let forgotten = $state(false);
 	/** Endpoint rows open for editing, and what is wrong with what was typed in each. */
 	let editing = $state<Record<string, boolean>>({});
 	let wrong = $state<Record<string, string>>({});
@@ -109,10 +113,10 @@
 			kind: 'JSON-RPC'
 		}))
 	]);
-	const groups = $derived([
-		{ key: 'main', title: t.common.mainnet, rows: rows.filter((r) => !r.chain.testnet) },
-		{ key: 'test', title: t.common.testnet, rows: rows.filter((r) => r.chain.testnet) }
-	]);
+	// the networks of the mode on screen first; the others folded away until asked for
+	const testnet = $derived(!!store.settings.testnet);
+	const here = $derived(rows.filter((r) => !!r.chain.testnet === testnet));
+	const there = $derived(rows.filter((r) => !!r.chain.testnet !== testnet));
 
 	/** A web page's host, or nothing: the data comes from a third party. */
 	const host = (url: string) => {
@@ -175,8 +179,54 @@
 	}
 </script>
 
+{#snippet network(r: Row)}
+	<div class="net">
+		<div class="row">
+			<b>{r.name}</b>
+			<span class="small grow"
+				>{r.chain.symbol}{r.chain.chainId !== undefined ? ` · ${r.chain.chainId}` : ''}</span
+			>
+			{#if store.settings.rpc[r.key]}<span class="pill dim">{t.settings.ownEndpoint}</span>{/if}
+			<button
+				class="ghost small"
+				aria-expanded={!!editing[r.key]}
+				onclick={() => (editing[r.key] = !editing[r.key])}>{t.settings.endpointButton}</button
+			>
+			{#if store.settings.chains.includes(r.chain)}<button
+					class="ghost small"
+					onclick={() => removeChain(r.chain)}>{t.settings.remove}</button
+				>{/if}
+		</div>
+		{#if editing[r.key]}
+			<input
+				value={store.settings.rpc[r.key] ?? ''}
+				placeholder={`${r.kind}: ${r.chain.rpc}`}
+				aria-label={t.settings.endpointLabel(r.name, r.kind)}
+				onchange={(e) => set(r.key, e.currentTarget.value)}
+				spellcheck="false"
+			/>
+			{#if wrong[r.key]}<div class="notice danger small" role="alert">
+					{wrong[r.key]}
+				</div>{/if}
+		{/if}
+	</div>
+{/snippet}
+
 <div class="stack narrow">
 	<h2>{t.settings.title}</h2>
+	<section class="card stack">
+		<div class="label">{t.bunker.title}</div>
+		<label class="row switch">
+			<input
+				type="checkbox"
+				role="switch"
+				checked={bunkerOn()}
+				onchange={(e) => setBunker(e.currentTarget.checked)}
+			/>
+			<b class="grow">{t.bunker.label}</b>
+		</label>
+		<p class="small">{bunkerOn() ? t.bunker.on : t.bunker.off}</p>
+	</section>
 	<section class="card stack">
 		<div class="label">{t.settings.networks}</div>
 		<input
@@ -279,44 +329,23 @@
 		{/if}
 		{#if problem}<div class="notice danger" role="alert">{problem}</div>{/if}
 		{#if added}<div class="notice info" role="status">{added}</div>{/if}
-		{#each groups as g (g.key)}
-			{#if g.rows.length}
-				<div class="group">{g.title}</div>
-				{#each g.rows as r (r.key)}
-					<div class="net">
-						<div class="row">
-							<b class="grow">{r.name}</b>
-							{#if store.settings.rpc[r.key]}<span class="pill dim">{t.settings.ownEndpoint}</span
-								>{/if}
-							<button
-								class="ghost small"
-								aria-expanded={!!editing[r.key]}
-								onclick={() => (editing[r.key] = !editing[r.key])}
-								>{t.settings.endpointButton}</button
-							>
-							{#if store.settings.chains.includes(r.chain)}<button
-									class="ghost small"
-									onclick={() => removeChain(r.chain)}>{t.settings.remove}</button
-								>{/if}
-						</div>
-						{#if editing[r.key]}
-							<input
-								value={store.settings.rpc[r.key] ?? ''}
-								placeholder={`${r.kind}: ${r.chain.rpc}`}
-								aria-label={t.settings.endpointLabel(r.name, r.kind)}
-								onchange={(e) => set(r.key, e.currentTarget.value)}
-								spellcheck="false"
-							/>
-							{#if wrong[r.key]}<div class="notice danger small" role="alert">
-									{wrong[r.key]}
-								</div>{/if}
-						{/if}
-					</div>
-				{/each}
-			{/if}
-		{/each}
+		<div class="group">{testnet ? t.common.testnet : t.common.mainnet}</div>
+		<div class="nets">
+			{#each here as r (r.key)}{@render network(r)}{/each}
+		</div>
+		{#if there.length}
+			<details class="other">
+				<summary class="group">
+					{testnet ? t.common.mainnet : t.common.testnet} · {there.length}
+				</summary>
+				<div class="nets">
+					{#each there as r (r.key)}{@render network(r)}{/each}
+				</div>
+			</details>
+		{/if}
 		<p class="small">{t.settings.endpointsNote}</p>
 	</section>
+	<Tokens />
 	<section class="card stack">
 		<div class="label">{t.settings.prices}</div>
 		<label class="row">
@@ -346,17 +375,31 @@
 	<section class="card stack">
 		<div class="label">{t.settings.browser}</div>
 		<p class="small">{t.settings.browserNote}</p>
-		<div>
-			<button
-				class="danger"
-				onclick={() => {
-					if (confirm(t.settings.forgetConfirm)) {
-						store.accounts = [];
-						save();
-					}
-				}}>{t.settings.forget}</button
-			>
-		</div>
+		{#if forgetting}
+			<div class="notice warn stack" role="alertdialog" aria-describedby="forget-text">
+				<p id="forget-text">{t.settings.forgetConfirm}</p>
+				<div class="row wrap">
+					<!-- svelte-ignore a11y_autofocus -->
+					<button autofocus onclick={() => (forgetting = false)}>{t.settings.keepAccounts}</button>
+					<button
+						class="danger"
+						onclick={() => {
+							store.accounts = [];
+							save();
+							forgetting = false;
+							forgotten = true;
+						}}>{t.settings.forget}</button
+					>
+				</div>
+			</div>
+		{:else}
+			<div>
+				<button class="danger" onclick={() => ((forgetting = true), (forgotten = false))}
+					>{t.settings.forget}</button
+				>
+			</div>
+			{#if forgotten}<p class="small" role="status">{t.settings.forgotten}</p>{/if}
+		{/if}
 	</section>
 </div>
 
@@ -386,6 +429,32 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--faint);
+	}
+	.nets {
+		display: grid;
+	}
+	.switch {
+		cursor: pointer;
+		gap: 12px;
+	}
+	.switch input {
+		width: 20px;
+		height: 20px;
+		accent-color: var(--lamp);
+		flex: none;
+	}
+	.wrap {
+		flex-wrap: wrap;
+	}
+	.notice p {
+		margin: 0;
+	}
+	.other summary {
+		cursor: pointer;
+		padding: 6px 0;
+	}
+	.net .small {
+		margin-left: 4px;
 	}
 	.net {
 		display: grid;

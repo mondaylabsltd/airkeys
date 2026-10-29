@@ -36,7 +36,8 @@ export default defineConfig(({ command }) => ({
 							'script-src': ['self', 'https://tj.appsdata.org/api/script.js'],
 							'worker-src': ['self'],
 							'style-src': ['self', 'unsafe-inline'],
-							'img-src': ['self', 'data:', 'blob:'],
+							// token and network logos (src/lib/ui/Coin.svelte)
+							'img-src': ['self', 'data:', 'blob:', 'https://ethereum-data.getvela.app'],
 							'connect-src': [
 								'https:',
 								'http://localhost:*',

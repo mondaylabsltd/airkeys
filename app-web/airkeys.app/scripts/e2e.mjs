@@ -93,6 +93,32 @@ for (let i = 0; ; i++) {
 		await sleep(300);
 	}
 }
+// A fork fetches each piece of mainnet state it reads, one after another within a request: the
+// web app's reads of every listed token for 100 accounts would take minutes, and hold up the
+// broadcasts. Read them first, many at a time, so the fork has them.
+{
+	const tokens = JSON.parse(readFileSync(path.join(WEB, '../../registry/networks.json'), 'utf8'))
+		.evm.find((c) => c.chainId === 1)
+		.tokens.map((t) => t.address);
+	const pad = (a) => a.slice(2).toLowerCase().padStart(64, '0');
+	const reads = accounts
+		.filter((a) => a.network === 'evm')
+		.flatMap(({ address: a }) => [
+			['eth_getBalance', [a, 'latest']],
+			['eth_getTransactionCount', [a, 'latest']],
+			...tokens.map((t) => ['eth_call', [{ to: t, data: '0x70a08231' + pad(a) }, 'latest']])
+		]);
+	let next = 0;
+	const started = Date.now();
+	await Promise.all(
+		Array.from({ length: 64 }, async () => {
+			while (next < reads.length) await rpc(...reads[next++]).catch(() => {});
+		})
+	);
+	console.log(
+		`fork warmed: ${reads.length} reads in ${Math.round((Date.now() - started) / 1000)} s`
+	);
+}
 await rpc('anvil_setBalance', [evm0, '0x' + (10n ** 19n).toString(16)]);
 const slot = execFileSync('cast', ['index', 'address', evm0, '9']).toString().trim();
 await rpc('anvil_setStorageAt', [USDC, slot, '0x' + 1_000_000_000n.toString(16).padStart(64, '0')]);

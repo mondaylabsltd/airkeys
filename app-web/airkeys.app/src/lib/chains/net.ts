@@ -157,6 +157,10 @@ export interface Prepared {
 	summary: string[];
 	/** The most it can cost in fees, as text. */
 	fee: string;
+	/** What stays behind for a second request, in words: past what one request may hold. */
+	left?: string;
+	/** Of `fee`, what moving the rest may cost, as text: shown so it can be weighed. */
+	restFee?: string;
 }
 
 export interface Broadcast {

@@ -24,7 +24,8 @@ keys, so an account's key stays unknown until the account spends.
   ([protocol](docs/PROTOCOL.md)).
 
 Networks: **Bitcoin** (BTC) and **Ethereum and EVM chains** (ETH and ERC-20 tokens on
-Ethereum, Base, Arbitrum, OP, Polygon, BNB, Avalanche, Sepolia, and any chain you add).
+Ethereum, Base, Arbitrum, OP, Polygon, BNB, Avalanche, Monad and 15 more EVM networks, their
+testnets, and any chain you add).
 
 ![The web app: the total, split into Bunker and Exposed, and a transfer request shown to the phone](docs/img/web.jpg)
 

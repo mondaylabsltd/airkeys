@@ -1,5 +1,5 @@
 // Everything the web app says, in Simplified Chinese: the same keys as the English. Labels of the
-// phone's screens (连接, 显示动态码, 扫描请求, 全部 100 个账户) are quoted as the phone shows
+// phone's screens (连接, 显示动态码, 扫描请求, 账户 #0 到 #99) are quoted as the phone shows
 // them in Chinese (core/app/src/app.rs and the shells).
 import type { Dict } from './en';
 
@@ -33,6 +33,7 @@ export const zh: Dict = {
 		endpoints: '节点',
 		notCountedAfter: '）。',
 		noPrice: (symbols) => `${symbols} 没有价格，未计入总额。`,
+		andMore: (names, more) => `${names} 等另外 ${more} 种`,
 		couldNotRead: (what) => `无法读取：${what}。`,
 		bunker: '地堡',
 		exposed: '已暴露',
@@ -41,14 +42,17 @@ export const zh: Dict = {
 		nothingExposed: '公钥已暴露的账户里没有资产',
 		receiveBitcoin: '在 Bitcoin 收款',
 		receiveEvm: '在 EVM 收款',
-		noHiddenBefore: (networks) =>
-			`这里没有连接公钥未暴露的 ${networks} 账户。在手机上：连接 → 全部 100 个账户，然后`,
+		noHiddenBefore: (networks, start, end) =>
+			`这里没有连接公钥未暴露的 ${networks} 账户。在手机上把滚轮转到 #${start}，再点连接 → 账户 #${start} 到 #${end}，然后`,
+		fewFreshBefore: (network, n, start, end) =>
+			`这里只连接了 ${n} 个未使用的 ${network} 账户，可供地堡模式转入资产。在用完之前：在手机上把滚轮转到 #${start}，再点连接 → 账户 #${start} 到 #${end}，然后`,
 		scanIt: '扫描',
 		noHiddenAfter: '。',
 		toMove: '待转移',
 		toMoveLead:
 			'这些账户转出过，公钥已经上链。把每个账户的资产转移到公钥未暴露的账户，每条链签名一次。',
 		move: '转移',
+		smallMoves: (n, under) => `另有 ${n} 项，每项价值不足 ${under}：转移的手续费可能更高`,
 		assets: '资产',
 		showAssetsOf: '按链显示资产',
 		all: '全部',
@@ -100,6 +104,7 @@ export const zh: Dict = {
 			`这个账户在 ${chains} 上没有资产。向上方地址收款后，每种币或代币会显示在这里，旁边有`,
 		holdsNothingAfter: '按钮。',
 		nothingOn: (chains) => `${chains} 上没有资产。`,
+		coin: '这条链的原生币',
 		unreachable: (what) => `无法连接：${what}。可以在设置中更换节点。`,
 		remove: '从这个浏览器移除此账户'
 	},
@@ -114,8 +119,11 @@ export const zh: Dict = {
 	},
 	connect: {
 		notAccounts: '这是签名回复，不是账户。请在手机上点“连接”。',
-		replace: (network, index, n) =>
-			`这些账户来自另一个钱包（或另一个密码短语）：${network} 账户 #${index} 在这里的地址不同。\n\n用它们替换这个浏览器中的 ${n} 个账户吗？资金不受影响。`,
+		otherWallet: '另一个钱包的账户',
+		otherWalletText: (network, index) =>
+			`${network} 账户 #${index} 在这里的地址不同：这些账户来自另一个钱包，或同一组助记词配了另一个密码短语。两者不会混在一起。无论怎么选，资金都不受影响。`,
+		replace: (n) => `替换这里的 ${n} 个账户`,
+		keep: '保留这里的账户',
 		kept: '没有添加。这个浏览器保留原来的账户。',
 		replaced: (n) => `已替换为这个钱包的 ${n} 个账户。`,
 		added: (n) => `已添加 ${n} 个账户。`,
@@ -132,10 +140,10 @@ export const zh: Dict = {
 		chainWith: (chain, what) => `${chain}（${what}）`,
 		moreChains: (n) => `，另有 ${n} 条链`,
 		enterAmount: '请输入金额。',
-		noFreshRest:
-			'Airkeys 还没找到可接收剩余资产的未使用账户。在手机上：连接 → 全部 100 个账户，然后在这里扫描。',
-		noFreshMove:
-			'Airkeys 还没找到可转入的未使用账户。在手机上：连接 → 全部 100 个账户，然后在这里扫描。',
+		noFreshRest: (start, end) =>
+			`Airkeys 还没找到可接收剩余资产的未使用账户。在手机上把滚轮转到 #${start}，再点连接 → 账户 #${start} 到 #${end}，然后在这里扫描。`,
+		noFreshMove: (start, end) =>
+			`Airkeys 还没找到可转入的未使用账户。在手机上把滚轮转到 #${start}，再点连接 → 账户 #${start} 到 #${end}，然后在这里扫描。`,
 		badIndex: '账户编号是 0 到 2147483647 之间的整数。',
 		restElsewhere: '请把剩余资产转移到另一个账户编号。',
 		moveElsewhere: '请转移到另一个账户编号。',
@@ -165,6 +173,7 @@ export const zh: Dict = {
 		changeBefore: 'Bitcoin 只能整笔花费收到的币，所以这个账户的币会全部花掉。找零转到账户 #',
 		changeAfter: '，它的公钥未暴露。',
 		changeLabel: '接收找零的账户',
+		changeBack: 'Bitcoin 只能整笔花费收到的币：没有转出的部分会作为找零退回本账户。',
 		rest: '这个账户的剩余资产',
 		moveRest: '转移到账户 #',
 		freshLabel: '新账户编号',
@@ -182,6 +191,7 @@ export const zh: Dict = {
 		review: '核对',
 		phoneWillSign: '手机将签名',
 		feeAtMost: '手续费上限',
+		restFee: '其中转移剩余资产',
 		edit: '修改',
 		show: '给手机扫描',
 		requestBefore: '在手机上：点',
@@ -249,7 +259,9 @@ export const zh: Dict = {
 		browser: '这个浏览器',
 		browserNote: '网页助手只在这个浏览器里保存地址和这些设置，从不接触密钥。',
 		forgetConfirm: '忘记这个浏览器中的所有账户？资金不受影响，重新连接手机就能看到。',
-		forget: '忘记所有账户'
+		forget: '忘记所有账户',
+		keepAccounts: '保留',
+		forgotten: '已忘记。重新连接手机就能再看到。'
 	},
 	scan: {
 		notAllowed: '浏览器没有获准使用摄像头。请允许这个页面使用摄像头，然后重试。',
@@ -308,7 +320,38 @@ export const zh: Dict = {
 	net: {
 		noAnswer: (host) => `${host} 没有响应`,
 		late: (host) => `${host} 没有及时响应`,
-		noBatch: '批量调用没有响应'
+		noBatch: '批量调用没有响应',
+		badAnswer: '返回的数据与请求不符'
+	},
+	bunker: {
+		title: '地堡模式',
+		label: '让资产留在没人见过公钥的账户里',
+		on: '开启：每次转出时，同一次签名会把这条链上剩下的资产转到公钥未暴露的账户，首页也会列出待转移的资产。每转移一种币或代币都要付一笔手续费。',
+		off: '关闭：转出时只转你填写的金额，Bitcoin 找零退回同一个账户，收款一直用同一个账户，和普通冷钱包一样。每个账户页上的“全部转移”仍然可用。Airkeys 仍会读取哪些公钥已暴露，重新开启地堡模式就能看到。'
+	},
+	tokens: {
+		title: '代币',
+		lead: 'Airkeys 会读取它在每个网络上收录的代币。其他 ERC-20 代币可以在这里按名称或合约地址添加。',
+		network: '网络',
+		search: '按名称或符号搜索，或粘贴合约地址',
+		loadingIndex: '正在加载代币列表…',
+		indexFailed: (why) => `代币列表没有加载成功（${why}）。可以直接粘贴合约地址。`,
+		reading: '正在读取合约…',
+		notToken: '这个地址在这个网络上不是 ERC-20 代币。',
+		badSymbol: (symbol) =>
+			`它的符号“${symbol}”手机无法显示：只能是 1 到 16 个 ASCII 字母、数字或符号。`,
+		listed: 'Airkeys 已经收录了这个代币。',
+		already: '这个代币已经添加过了。',
+		decimals: (n) => `${n} 位小数`,
+		check: '任何人都能发行任意名称的代币。添加前，请到项目官网核对合约地址。',
+		add: '添加代币',
+		added: (symbol) => `已添加 ${symbol}，余额会显示在首页。`,
+		note: '这里添加的代币没有价格，手机签名时会标为未收录，并显示合约地址。',
+		yours: '你添加的',
+		remove: '移除',
+		missingBefore: '缺少某个代币？',
+		missingLink: '到设置里添加',
+		missingAfter: '。'
 	},
 	chainData: {
 		mismatch: '链数据与这个链 ID 不符。',
@@ -332,12 +375,15 @@ export const zh: Dict = {
 		tooLittleAt: (held, rate) => `账户余额 ${held}，不够支付这个金额和 ${rate} sat/vB 的手续费。`,
 		dust: (sat) => `金额低于网络的粉尘下限 ${sat} sat。`,
 		changeNeedsAccount: '找零需要一个转入账户。',
+		changeBack: (amount) => `找零 ${amount} 退回本账户`,
 		moveChange: (amount, index) => `把找零 ${amount} 转移到你的账户 #${index}`,
 		spendAll: (n, total) => `花掉这个账户的全部 ${n} 笔币（${total}）`,
 		tooLarge: '这些币的前序交易太大：一次请求会超过 1 MiB，即手机能读取的上限。',
 		holds: (held) => `账户余额为 ${held}。`,
 		feeNotCovered: '余额不够支付手续费。',
 		nothingToMove: '没有可转移的：余额不够支付手续费。',
+		stayBehind: (symbols) =>
+			`一次请求最多 16 笔交易，所以 ${symbols} 暂时留在这个地址。这次签名并广播之后，再用“全部转移”转走它们。`,
 		feesExceed: (fees, held) => `手续费最多需要 ${fees}，账户余额为 ${held}。`
 	}
 };
